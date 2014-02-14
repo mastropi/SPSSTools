@@ -155,7 +155,7 @@ from numpy import *     # I use this import formula here because there are many 
 # Global variables used at NAT
 from natglobals import tempdir_
 # Import auxiliay functions
-from dmspssaux import CheckVariables BuildVarListAndString Save
+from dmspssaux import CheckVariables, BuildVarListAndString, Save
 
 __all__ = [ "RemoveNamesFromList",
             "MissingValues",
