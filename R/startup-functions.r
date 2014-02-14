@@ -8,7 +8,7 @@
 
 
 # INDEX
-# - MATLAB-like functions
+# - GENERAL functions
 # - DATA ANALYSIS functions
 # - GRAPHICAL functions
 
@@ -82,8 +82,7 @@ getAxisLimits = function(ext=0.04)
 	return(c(xlim, ylim))
 }
 
-CheckVariables = function(data, vars, print=FALSE) { checkVariables(data, vars, print=print) }
-checkVariables = function(data, vars, print=FALSE)
+CheckVariables <- checkVariables = function(data, vars, print=FALSE)
 # Created: 			2013/08/05
 # Modified: 		2013/08/05
 # Author: 			Daniel Mastropietro
@@ -124,16 +123,18 @@ checkVariables = function(data, vars, print=FALSE)
 }
 
 who = function(envir=.GlobalEnv)
-# Created: 2008
+# Created: 			2008
+# Descriptoin: 	Function that implements the Matlab-like function 'who' listing the objects defined in memory
 {
 	print(as.matrix(ls(envir=envir)))
 }
 
 whos = function(envir=.GlobalEnv, sortby=c("name","size"), decreasing=FALSE)
-# Created: 2008
-# Modified: 2008/09/09
-# Author: Daniel Mastropietro
-# Description: Shows the variables defined with their sizes, optionally sorting by size in ascending or descending order.
+# Created: 			2008
+# Modified: 		09-Sep-2008
+# Author: 			Daniel Mastropietro
+# Description: 	Function that implements the Matlab-like function 'whos' showing the objects defined in memory
+#								along with their sizes, optionally sorting by size in ascending or descending order.
 {
   if (length(sortby) == 2) { sortby = "name" }
 	
