@@ -1491,6 +1491,13 @@ execute.""" %locals())
     varnumAll, dummy = BuildVarListAndString(varnum)
     nn = len(varnumAll)               # number of variables passed in varnum
 
+    #-- WEIGHT
+    # Check if weight was passed
+    if weight:
+        weight, dummy = BuildVarListAndString(weight)
+    else:
+        weight = ""
+
     #-- Check the existence of variables in the analysis dataset
     found, varsNotFoundList = CheckVariables(targetlist + scorelist + varlist + varclassAll + varnumAll + [weight], casesensitive=False, log=False)
     if not found:
@@ -2260,7 +2267,14 @@ def PartialPlots(
     # Convert the parameters to lists, so that the extraction of its elements is easier
     varclass, dummy = BuildVarListAndString(varclass)
     varnum, dummy = BuildVarListAndString(varnum)
-
+    
+    #-- WEIGHT
+    # Check if weight was passed
+    if weight:
+        weight, dummy = BuildVarListAndString(weight)
+    else:
+        weight = ""     # This must be a list because it is passed to CheckVariables which takes variables as a list
+        
     #-- Check the existence of variables in the analysis dataset
     found, varsNotFoundList = CheckVariables(targetlist + scorelist + varlist + varclass + varnum + [weight], casesensitive=False, log=False)
     if not found:
