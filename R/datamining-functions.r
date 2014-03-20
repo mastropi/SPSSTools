@@ -337,13 +337,13 @@ gvar = groupvars[1]
 
 #-------------------------------- GRAPHICAL SETTINGS --------------------------------#
 # Store current settings
-options = par(no.readonly=TRUE)
+opar = par(no.readonly=TRUE)
 	## Note the use of no.readonly=TRUE, so that only the parameters that can be changed are returned
 	## thus avoiding an error when resetting the graphical parameters on exit below.
 # Restore the graphical settings when this function exits (either normally or by an error)
-#on.exit(par(mfrow=options$mfrow, mar=options$mar, oma=options$oma, usr=options$usr, cex=options$cex, ps=options$ps))
-## The above was left as reference until I verify that using par(options) when options has been created using no.readonly=TRUE works fine.
-on.exit(par(options))
+#on.exit(par(mfrow=opar$mfrow, mar=opar$mar, oma=opar$oma, usr=opar$usr, cex=opar$cex, ps=opar$ps))
+## The above was left as reference until I verify that using par(opar) when opar has been created using no.readonly=TRUE works fine.
+on.exit(par(opar))
 
 # Create the tiling of the graph
 if (nvars == 1 & !alltogetherGroups) {
@@ -1307,7 +1307,7 @@ ScoreDistribution = function(
   x = h$mids[h$counts>0]
   
   ### Plot
-  mar = par("mar")
+  mar = par("mar"); on.exit(par(mar=mar))
   par(mar=mar+c(0,0,0,1))
   if (is.null(xlim)) {
     xlim = range(h$breaks)
@@ -1336,6 +1336,10 @@ ScoreDistribution = function(
     g = 0.5
     b = 0.5
   }
+	# Before plotting, change the clipping of the objects to plot to the FIGURE so that when adding count labels to an existing plot
+	# they are fully visible even if part of them fall outside the plot region.
+	opar = par(xpd=TRUE)
+	on.exit(par(xpd=opar$xpd), add=TRUE)
   if (h$equidist) {
     ylim = range(h$counts + 0.01*max(h$counts)) # +0.01*max() is to leave space for the counts on top of each histogram bar
     plot(h, freq=FALSE, lty=0, xaxt="n", yaxt="n", main="", xlab="", ylab="")   # Generates first plot in the percent scale (but does NOT show the histogram)
@@ -1445,13 +1449,10 @@ ScoreDistribution = function(
     mtext(yticks, side=4, at=yticks, outer=TRUE)
     mtext(ylab2, side=4, line=2, las=3)
     # Add legend
-    legend("top", legend=c(legend, paste("Total de casos:", sum(toplot_n$target))), cex=cex, y.intersp=1, pch=pch, pt.bg=colors[colind], col=colors[colind], bg=rgb(0.7,0.7,0.7,1/10), horiz=FALSE)
+    legend("top", legend=c(legend, paste("Total number of cases:", sum(toplot_n$target))), cex=cex, y.intersp=1, pch=pch, pt.bg=colors[colind], col=colors[colind], bg=rgb(0.7,0.7,0.7,1/10), horiz=FALSE)
   } else {
     # Add legend
     legend("top", legend=paste("Total de casos:", sum(toplot_n$target)), cex=cex, bg=rgb(0.7,0.7,0.7,1/10), horiz=FALSE)
   }
-
-  # Restore graphical options
-  par(mar=mar)
 }
 ####################################### ScoreDistribution #####################################

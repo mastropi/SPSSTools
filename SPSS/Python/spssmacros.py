@@ -1217,13 +1217,18 @@ sort cases by var %(byvars)s.
 # -[DONEPARTIALLY-2014/01/04: I say it was partially done because
 # the fit for the Impact Plot when the variable IS in the model is not correct (since it does not coincide with the actual model fit,
 # checked by passing parameter 'score' to the function),
-# neither for the LINEAR case nor for the LOGISTIC case... I don't understand why
-# at least it doesn't work for the linear case...] 2013/12/26: Add the possibility of doing a weighted regression (this came up when I had to do a weighted regression for NBC).
+# neither for the LINEAR case nor for the LOGISTIC case... I don't understand why!!] 2013/12/26: Add the possibility of doing a weighted regression (this came up when I had to do a weighted regression for NBC).
 # Note: weighting is implemented with the WEIGHT BY command before the regression command.
 # The main problem here is: how should PLOTTING be carried out? I.e. how do we represent the weights when plotting???
 # I guess the best way would be to compute the average of the target variable as a weighted average...
 # OK: This would be naturally done when using the command 'WEIGHT BY weight' at the beginning of the code since the average
 # computed for each bin would be taken using the weights.
+# - 2014/02/20: Add ERROR BARS to the fitted values in the Impact Plot so that we can visually judge whether the difference
+# between fitted curves (e.g. with and without the analyzed variable in the model) is significant or not. This is to overcome
+# the fact that each plot is plotted on their own scale, thus making it difficult to judge large vs. small differences.
+# I THINK implementing this should not be too problematic because the color of the bars would be the same as the color of the
+# fitted values... I think the graph would get much more complicated (in terms of implementation) if the type of line and color
+# to use were different from the fit...
 def PartialPlot(
     data=None,
     where=None,
@@ -1232,7 +1237,7 @@ def PartialPlot(
     var="x",
     varclass=(),
     varnum=(),
-    weight=None,
+    weight=(),
     groups=20,
     model="linear",
     showfit=True,
@@ -1492,14 +1497,11 @@ execute.""" %locals())
     nn = len(varnumAll)               # number of variables passed in varnum
 
     #-- WEIGHT
-    # Check if weight was passed
-    if weight:
-        weight, dummy = BuildVarListAndString(weight)
-    else:
-        weight = ""
+    # Convert the parameter to a list so that the existence of the variable can be checked with CheckVariables
+    weightlist, weight = BuildVarListAndString(weight)
 
     #-- Check the existence of variables in the analysis dataset
-    found, varsNotFoundList = CheckVariables(targetlist + scorelist + varlist + varclassAll + varnumAll + [weight], casesensitive=False, log=False)
+    found, varsNotFoundList = CheckVariables(targetlist + scorelist + varlist + varclassAll + varnumAll + weightlist, casesensitive=False, log=False)
     if not found:
         errmsg = errmsg + "\nPARTIALPLOT: ERROR - The following " + str(len(varsNotFoundList)) + " variables were not found in dataset " + data
         for v in varsNotFoundList:
@@ -2068,7 +2070,7 @@ def PartialPlots(
     vars=(),
     varclass=(),
     varnum=(),
-    weight=None,
+    weight=(),
     groups=20,
     model="linear",
     showfit=True,
@@ -2269,14 +2271,11 @@ def PartialPlots(
     varnum, dummy = BuildVarListAndString(varnum)
     
     #-- WEIGHT
-    # Check if weight was passed
-    if weight:
-        weight, dummy = BuildVarListAndString(weight)
-    else:
-        weight = ""     # This must be a list because it is passed to CheckVariables which takes variables as a list
+    # Convert the parameter to a list so that the existence of the variable can be checked with CheckVariables
+    weightlist, weight = BuildVarListAndString(weight)
         
     #-- Check the existence of variables in the analysis dataset
-    found, varsNotFoundList = CheckVariables(targetlist + scorelist + varlist + varclass + varnum + [weight], casesensitive=False, log=False)
+    found, varsNotFoundList = CheckVariables(targetlist + scorelist + varlist + varclass + varnum + weightlist, casesensitive=False, log=False)
     if not found:
         errmsg = errmsg + "\nPARTIALPLOTS: ERROR - The following " + str(len(varsNotFoundList)) + " variables were not found in dataset " + data
         for v in varsNotFoundList:
@@ -3298,6 +3297,11 @@ END GPL.
 
 ###################################### ModelCollin ############################################
 # 2013/11/19
+#
+# TODO:
+# - (2014/03/13) I realized (working on the Kaggle competition) that, when a variable is EXACTLY a linear combination of other variables, 
+# it is not detected as large VIF. This is because the VIF is infinite and most likely does not satisfy the condition VIF > threshold.
+# In order to solve this, change the condition "if CollinValue > thr" to something appropriate by checking whether CollinValue is... missing I guess?
 def ModelCollin(
     data=None,
     target="y",

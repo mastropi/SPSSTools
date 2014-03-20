@@ -5,6 +5,11 @@ Author: Daniel Mastropietro"""
 
 # HISTORY:
 # 2014/02/14: Module created.
+# 2014/03/08: In BuildVarListAndString() function,
+#             Added a new parameter 'dedup' so that the list of names are not dedupped. This is needed for example by
+#             the RDistributionsByGroup() function when parsing the value of parameter 'transforms' which may have duplicates
+#             (since it does NOT contain a variable list but a set of transformation to apply to the variables, which may be the same
+#             for different variables!)
 #
 
 import spss
@@ -24,9 +29,9 @@ __all__ = [ "CheckVariables",
 # following added functionalities:
 # - it removes blank spaces or empty lines at the beginning or end of parameter 'vars' that would otherwise be considered as
 # an empty variable name.
-# - it dedups the list of names passed in 'vars' (by keeping its original order!)
+# - if requested, it dedups the list of names passed in 'vars' (by keeping its original order!)
 # - it removes blank spaces at the beginning or end of each identified variable name
-def BuildVarListAndString(vars, sort=False):
+def BuildVarListAndString(vars, sort=False, dedup=True):
     # Convert the variable names to a list (in case they are not a list already)
     varlist = spssaux._buildvarlist(vars)
 
@@ -46,8 +51,8 @@ def BuildVarListAndString(vars, sort=False):
         ## method does NOT exist.
         ## (probably his document is valid for an older version of spssaux since its dated 2007...)
 
-    # If no sort is requested, remove duplicates by keeping the order in which the variables are passed
-    if not(sort):
+    # If no sort and dedup are requested, remove duplicates by keeping the order in which the variables are passed
+    if not(sort) and dedup:
         varlistOrig = varlist
         # Remove duplicates
         varlist = [v for v in set(varlist)]
@@ -59,10 +64,12 @@ def BuildVarListAndString(vars, sort=False):
         # Re-create the list with no duplicates in the original order
         varlist = [varlistOrig[i] for i in indices]
     else:
-        # Remove duplicates
-        varlist = [v for v in set(varlist)]
-        # Sort the list if requested
-        varlist.sort()
+        if dedup:
+            # Remove duplicates
+            varlist = [v for v in set(varlist)]
+        if sort:
+            # Sort the list if requested
+            varlist.sort()
 
     # Create variable list as a new-line-separated string and removes any blank spaces before or after its name
     # Note that I explicitly convert each element of 'varlist' to string in case the values in vars are numbers  (e.g. percentiles list as passed to Summary())

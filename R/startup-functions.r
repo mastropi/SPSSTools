@@ -21,6 +21,10 @@
 #								and yaxs="r" (regular axis) which imply that the actual "usr" limits are extended from the xlim and
 #								ylim extremes by 4% of the limits range!! (Ref: documentation of par() and the 'xaxs' and 'yaxs'
 #								options therein).
+# - 2014/03/12: Created functions:
+#								- safeLogInv(): computes the inverse of the safeLog() function
+#								- logitInv(): computes the inverse of the logit() function available in the car package
+#								- plot.cdf(): plots the CDF of a variable
 #
 
 # TODO:
@@ -82,7 +86,7 @@ getAxisLimits = function(ext=0.04)
 	return(c(xlim, ylim))
 }
 
-CheckVariables <- checkVariables = function(data, vars, print=FALSE)
+CheckVariables <- checkVariables <- function(data, vars, print=FALSE)
 # Created: 			2013/08/05
 # Modified: 		2013/08/05
 # Author: 			Daniel Mastropietro
@@ -157,7 +161,9 @@ whos = function(envir=.GlobalEnv, sortby=c("name","size"), decreasing=FALSE)
 ###################################### DATA ANALYSIS functions ################################
 # INDEX (sorted alphabetically)
 # quantile.weight
+# logitInv
 # safeLog
+# safeLogInv
 #
 
 # 2013/08/18
@@ -235,6 +241,26 @@ safeLog = function(x, constant=1)
 {
   return(sign(x)*log10(constant + abs(x)))
 }
+
+# Compute the inverse of the safe-log function in base 10 implemented in function safeLog()
+safeLogInv = function(x, constant=1)
+{
+  return(sign(x)*(10^abs(x) - constant))
+}
+
+# Compute the inverse of the logit() function defined in the car package
+logitInv = function(x, adjust=0)
+# The logit() function in the car package allows an adjustment of the 0 and 1 probabilities to
+# avoid -Inf and +Inf, by using an adjustment factor 'adj' and computes the logit as:
+# log(padj/(1-padj))
+# where padj = p*(1-2*adj) + adj, linear mapping from [0,1] to [adj,1-adj]
+# Note: This was verified by intuition and comparing the output from logit() with my own
+# computation as described above.
+{
+	y = 1/(1+exp(-x))
+	yadj = (y - adjust)/(1-2*adjust)
+	return(yadj)
+}
 ###################################### DATA ANALYSIS functions ################################
 
 
@@ -251,6 +277,7 @@ safeLog = function(x, constant=1)
 # pairsYAxisPosition
 # plot.axis
 # plot.binned
+# plot.cdf		(NEW Mar-2014)
 # plot.dist (in construction, which calls panel.dist --when finalized should I remove the 'add' parameter form panel.dist() --because this is a panel function--, or should I leave it anyway (with default value always add=TRUE)? perhaps leave it...)
 # plot.hist
 # plot.image
@@ -384,8 +411,7 @@ panel.cor <- function(x, y, digits=2, prefix="", use="pairwise.complete.obs", ce
 # HISTORY: (2013/06/25) added parameter 'use' passed in the cor() function call to define how missing values should be treated for the computation of the correlation.
 #
 {
-  usr <- par("usr"); on.exit(par(usr))
-  par(usr = c(0, 1, 0, 1))
+  opar <- par(usr=c(0, 1, 0, 1)); on.exit(par(opar))
   r <- abs(cor(x, y, use=use))
   txt <- format(c(r, 0.123456789), digits=digits)[1]
   txt <- paste(prefix, txt, sep="")
@@ -483,7 +509,7 @@ panel.hist <- function(x, ...)
   # are passed to other functions used in the pairs() call to be used for the different panels
   # (e.g. plot.binned() below which accepts many parameters) 
 {
-  usr <- par("usr"); on.exit(par(usr))
+  usr <- par("usr"); on.exit(par(usr=usr))
   par(usr = c(usr[1:2], 0, 1.5) )
   h <- hist(x, plot = FALSE)
   breaks <- h$breaks; nB <- length(breaks)
@@ -566,29 +592,30 @@ plot.image = function(x, y, col="red", nlevels=12, xaxt="s", yaxt="s", addXAxis=
 # One option would be to use the sys.calls() function (already used at the beginning of plot.binned()), identify the pairs() call and
 # check whether the 'gap' parameter is listed in that call. If not, assume that the default 'gap' value is in use (gap=1).
 # - 2013/11/14: If requested, have the function call InformationValue() to compute the information value of the analyzed variable
-# on the target and in that case display the as the title of the plot and also show a table of the WOE by bin on the right-hand side
+# on the target and in that case display it as the title of the plot and also show a table of the WOE by bin on the right-hand side
 # of the plot (but only when add=FALSE, which is the case for instance when the plot is NOT part of a pairs plot)
 plot.binned = function(
 	x, y, pred=NULL, target=NULL, grouped=FALSE,
 	center=mean, scale=sd, groups=20, breaks=NULL, rank=TRUE,
   lm=TRUE, loess=TRUE,
   circles=NULL, thermometers=NULL,  # 'circles' and 'thermometers' must be EXPRESSIONS that parameterize the corresponding symbol based on the computed grouped values (e.g. circles=expression(x_n) or thermometers=expression(cbind(x_n,y_n,target_center)), since these values would not exist during the function call)
-  col="light blue", col.pred="black", col.target="red", col.lm="blue", col.loess="green",
+  col="blue", col.pred="black", col.target="red", col.lm="blue", col.loess="green",
 	pointlabels=TRUE, bands=FALSE, width=2, stdCenter=TRUE, # stdCenter: whether to show the bands using the standard deviation of the *summarized* y value (calculated as scale/sqrt(n), where n is the number of cases in the x category)
   boxplots=FALSE, add=FALSE, offset=1, inches=0.5, size.min=0.05, cex.label=1,
 	xlab=NULL, ylab=NULL, xlim=NULL, ylim=NULL, ylim2=NULL,  # ylim for the secondary axis used to plot the target values
 	xlimProperty="orig",  # xlimProperty can be either "new" or "orig"; in the latter  case the range of the ORIGINAL x values are used as limits for the x-axis => within a pairs() call the same x-axis scale is expected to be shown for ALL pairs plot (unless there are different missing values depending on the analyzed variables)
 	ylimProperty="orig",  # ylimProperty can be either "new" or "orig"; in the latter case the range of the ORIGINAL y values are used as limits for the y-axis => within a pairs() call the same y-axis scale is expected to be shown for ALL pairs plot (unless there are different missing values depending on the analyzed variables)
   ylim2Property="orig", # ylim2Property can be either "new" or "orig"; in the latter case the range of the ORIGINAL target values are used as limits for the secondary y-axis => within a pairs() call the same secondary y-axis scale is expected to be used for ALL pairs plot (unless there are different missing values depending on the analyzed variables)
+  type2="b", pch2=21,	  # type and pch par() options defining the form and symbol of the target variable
   xaxt="s", yaxt="s",
 	addXAxis=(xlimProperty!="orig"), addYAxis=(ylimProperty!="orig"), # addXAxis, addYAxis: Whether to manually add the x/y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
   addY2Axis=(ylim2Property!="orig"), # addY2Axis: whether to manually add the secondary y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this is set to TRUE when the secondary axis limits are NOT requested to be in the original coordinates --in which case the secondary y-axis have the same range for all pairs plots)
 	title=NULL,
 	clip="figure",				# clipping area, either "figure" or "region". This parameter affects the xpd option of par(). Note that "region" is the default in par() but here I set "figure" to the default so that big bubbles are shown full --instead of being partially hidden by the axes.
 	plot=TRUE, print=TRUE, ...)
-# Created: 2008/09/09
-# Modified: 2013/09/15
-# Plots on binned variables, optionally with a third variable that for example represents a fit from a model.
+# Created: 			09-Sep-2008
+# Modified: 		11-Mar-2014
+# Description:	Plots on binned variables, optionally with a third variable that for example represents a fit from a model.
 # HISTORY:  (2013/06/25) Added parameter cex to change minimum label size for the points (added using text()) and to define overall label size (such as for labels added by mtext())
 #           (2013/07/08) Added parameter pairsFlag so that this function can be used for the plots in the panels of a pairs() call (which does NOT allow the generation of a new plot in the panels)
 #           (2013/08/14) Added parameter groups which plays the role of the previously names 'breaks', and I use now 'breaks' in case the user wants to define their own break points (instead of specifying 'groups')
@@ -624,6 +651,8 @@ plot.binned = function(
 #						(2013/12/31) Added the min and max values of x and y for each x category as part of the data returned by the function as output$data.
 #												 NOTE: THIS STILL NEEDS FIXING BECAUSE IT DOES NOT WORK WHEN 'pred' OR 'target' ARE PASSED. For now it is commented out.
 #						(2014/01/04) Added parameters col.pred and col.target to define the colors of the 'pred' and 'target' lines in the plot.
+#						(2014/03/04) Changed the color parameter for the pointlabels and error bars from "blue" to the one specified in 'col'.
+#						(2014/03/11) Added parameters 'type2' and 'pch2' defining the form and symbols for the plot of the target variable.
 {
   #----------------------------------- Parse input parameters ---------------------------------#
   ### Check whether this function is called by pairs, in order to set parameter add=TRUE, so a new plot is NOT created (which gives an error in pairs())
@@ -756,7 +785,7 @@ plot.binned = function(
 
   #------------------------------------ Prepare to plot ---------------------------------------#
 	attach(toplot)
-	on.exit(detach(toplot))
+	on.exit(detach(toplot), add=TRUE)		# The add=TRUE option adds the current command to the list of commands to execute "on exit" that has been started already.
 	# Linear fit (weighted by the number of cases in each group)
   if (lm)     { lmfit = lm(y_center ~ x_center, weights=x_n) }
 	# Loess fit (local regression, weighted by the number of cases in each group)
@@ -908,16 +937,16 @@ plot.binned = function(
     # If requested, plot the +- stdev or +- stdev/sqrt(n) bands around the summarized y values.
     if (bands)
     {
-    	points(x_center, toplot$y_upper, col="blue", pch="_", lwd=4, lty=2)
-    	points(x_center, toplot$y_lower, col="blue", pch="_", lwd=4, lty=2)
-    	segments(x_center, toplot$y_lower, x_center, toplot$y_upper, col="blue", lwd=2)
+    	points(x_center, toplot$y_upper, col=col, pch="_", lwd=4, lty=2)
+    	points(x_center, toplot$y_lower, col=col, pch="_", lwd=4, lty=2)
+    	segments(x_center, toplot$y_lower, x_center, toplot$y_upper, col=col, lwd=2)
     }
     
     # Reference line and labels
     abline(h=0)
     if (is.null(thermometers) & pointlabels) {
       # Only add labels when thermometers are NOT used as symbols (because they already show the target value as labels)
-      text(x_center, y_center, x_n, pos=1, offset=offset, cex=cex.label*log10(1 + x_n/10), col="blue")
+      text(x_center, y_center, x_n, pos=1, offset=offset, cex=cex.label*log10(1 + x_n/10), col="black")
     }
     title(title)
     
@@ -931,7 +960,7 @@ plot.binned = function(
       # (this may not be the case even if the x variable is the same as the previous plot!!)
       # Note that setting the same user coordinates does NOT have the same effect as setting the same xlim range!!
       par(new=TRUE)
-      plot(x_center, target_center, type="b", pch="x", col=col.target, lwd=2, xlab="", ylab="", xlim=xlim, ylim=ylim2, xaxt="n", yaxt="n")
+      plot(x_center, target_center, type=type2, pch=pch2, col=col.target, bg=col.target, lwd=2, xlab="", ylab="", xlim=xlim, ylim=ylim2, xaxt="n", yaxt="n")
       abline(h=weighted.mean(target_center), col=col.target, lty=2)
       # Add the secondary axis ticks only when the panel is at one of the edge columns
       # This is useful when this function is called by pairs() as one of the pair functions (e.g. through upper.panel option) and it mimics what pairs() does.
@@ -975,7 +1004,7 @@ plot.binned = function(
 
 # Pairs plot of a set of variables where customized information is shown on the lower, diagonal and upper panels
 # CHECK ALSO the car package (companion to applied regression) for interesting functions to enhance plots commonly used for regression)
-pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.panel=points, addXAxis=FALSE, addYAxis=FALSE, ...)
+pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.panel=points, addXAxis=FALSE, addYAxis=FALSE, max.panels=6, pause=TRUE, ...)
 # Created:      2013/07/08
 # Modified:     2013/07/08
 # Description:  A manual pairs plot is produced. The plot is manual in that no call to the pairs() function is done but rather
@@ -988,12 +1017,20 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 #               - Upper diagonal: binned scatter plots produced by plot.binned() function defined above.
 #               - Lower diagonal: correlation values produced by panel.cor() function defined above or the 2D kernel density estimation shown as image intensities
 # Parameters:  
-#               x:        Matrix or data frame whose columns are used to produce the pairs plot
-#               addXAxis: Whether to manually add the x-axis ticks (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
-#               addYAxis: Whether to manually add the y-axis ticks (this was invented because the value of par("yaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
+#               x:        	Matrix or data frame whose columns are used to produce the pairs plot
+#               addXAxis:	  Whether to manually add the x-axis ticks (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
+#               addYAxis: 	Whether to manually add the y-axis ticks (this was invented because the value of par("yaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
+#								max.panels: Max number of panels to show per pairs plot. Several pairs plot are constructed when the number of variables in x is larger than max.panels.
 #
 # HISTORY:  (2013/09/03) Took care of missing values in the data (i.e. removed cases that have missing values in ANY of the analyzed variables x, y and pred.
 #           (2013/09/15) Placed the two functions used by default for the lower and diagonal panels outside of this function so that they can be called by any pairs() call.
+#						(2014/03/11) Added two new parameters: 'max.panels' and 'pause'.
+#												 max.panels specifies the maximum number of panels to show per pairs plot.
+#												 pause indicates whether to pause between plots and wait for a key pressed to continue.
+#												 NOTE: If there is a target variable, it should be placed FIRST in the x matrix, so that it is plotted in ALL pairs plot at the first row.
+#												 Also, for some reason the target variable CANNOT be passed as e.g. dat[,"target"] but it should be passed as dat$target.
+#												 In the former case, I got the error "only 0's can be mixed with negative subscripts"... Not yet clear why I get this error.
+#
 {
   # Store the list of explicitly defined parameters in this function
   # (note that this information is not used but was left here as a reference of how to read the parameters explicitly passed by the user during the function call)
@@ -1032,8 +1069,50 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
   if (is.null(paramsList$new)) paramsList$new = FALSE
   if (is.null(paramsList$oma)) paramsList$oma = c(2,3,2,3)
 
-  # Call the pairs() function
-  do.call("pairs", paramsList)
+	# Limit the number of panels on each plot to the value specified in 'max.panels'
+	if (ncol(x) > max.panels) {
+		# Define the first column with input variables to plot in the pairs plot (i.e without considering any target variable passed by the user)
+		if (!is.null(paramsList$target)) {
+			# It is assumed that the target variable is at the first column of x
+			target = x[,1]
+			# Reduce the value of max.panels because there is one more row for the target variable already in every pairs plot
+			max.panels = max.panels - 1
+			# First independent variable to plot
+			i = 2
+		} else {
+			i = 1
+		}
+		imax = ncol(x)
+		nplots = ceiling(imax/max.panels)
+		if (!is.null(target)) {
+			# The number of panels per pairs plot is max.panels + 1
+			cat("For better view, the pairs plot is divided into", nplots, "plots of", max.panels+1, "panels each.\n")
+		} else {
+			# The number of panels per pairs plot is max.panels
+			cat("For better view, the pairs plot is divided into", nplots, "plots of", max.panels, "panels each.\n")
+		}
+		plotnum = 0
+		for (i in seq(i,imax,max.panels)) {
+			plotnum = plotnum + 1
+			cat("Plot", plotnum, "of", nplots, "...\n")
+			if (!is.null(paramsList$target)) {
+				paramsList$x = x[,c(1,i:min(i+max.panels-1, imax))]
+			} else {
+				paramsList$x = x[,i:min(i+max.panels-1, imax)]
+			}			
+		  # Call the pairs() function
+		  do.call("pairs", paramsList)
+		  i = i + max.panels
+		  if (pause & i <= imax) {
+		  	cat("Press ENTER for next plot:")
+		  	readline()
+		  }
+		}
+	} else {
+		# Call the pairs() function
+		do.call("pairs", paramsList)	
+	}
+
 }
 
 # Histogram in log scale
@@ -1360,6 +1439,53 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
     return(outliers)
   }
 }
+
+# Plot CDF of a numeric variable
+plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
+# Created:      12-Mar-2014
+# Modified:     12-Mar-2014
+# Description:  Plot CDF of a numeric variable in the quantiles specified in parameter 'probs'
+# Details:			The parameter probs comes the named parameter in function quantile()
+# Parameters:   x: An numeric array
+# Output:       A matrix containing the CDF of x where the row names are the quantile values defined in 'probs'.
+# Assumptions:  There are no missing values (NA) in the data!
+{
+	# Stop if X is not numeric (e.g. stop if it is character or if it is a matrix of more than one column)
+	stopifnot(is.numeric(x))
+
+	# Check if NAs are present in the data and issue a warning
+	na.check = sum(is.na(x))
+	if (na.check > 0) {
+		na.pct = formatC(na.check/length(x)*100, format="f", digits=1)
+		cat("PLOT.CDF: WARNING -", na.check, "NA(s) (", na.pct, "% ) found in array", deparse(substitute(x)), ".\n")
+		cat("PLOT.CDF: Analysis based on", length(x)-na.check, "valid values out of", length(x), ".\n")
+	}
+
+	# Compute CDF
+	x.cdf = quantile(x, probs=probs, na.rm=TRUE)
+	
+	# Plot
+	# Define default values for graphical parameters (by checking whether the user passed any of those defined)
+	if (!exists("ylab", envir=sys.nframe())) { type = "l" } 
+	if (!exists("xaxt", envir=sys.nframe())) { xaxt = par("xaxt") }
+	if (!exists("yaxt", envir=sys.nframe())) { yaxt = par("yaxt") }
+	if (!exists("xlab", envir=sys.nframe())) { xlab = deparse(substitute(x)) }
+	if (!exists("ylab", envir=sys.nframe())) { ylab = "cdf" } 
+	if (!exists("main", envir=sys.nframe())) { main = paste("Total cases:", length(x)-na.check) }
+  if (add) {
+    # Do not show the axis ticks nor the x label when the plot is added to an existing graph
+    xaxt = "n"
+    yaxt = "n"
+    xlab = ""
+	}
+
+	# Construct the CDF values to plot on the vertical axis from the names of the x.dist array
+	cdf.values = as.numeric(gsub("%","",names(x.cdf)))
+	par(new=add)
+	plot(x.cdf, cdf.values, type=type, xlab=xlab, ylab=ylab, xaxt=xaxt, yaxt=yaxt, main=main, ...)
+	
+	return(as.matrix(x.cdf))
+}
 ######################################### GRAPHICAL functions #################################
 
 
@@ -1428,14 +1554,14 @@ roc.1 <- function(formula, data, pos = 1, groups = 20, quantile.type = 1, round.
   color = switch(pos, 'blue', 'green', 'red', 'black', 'purple', 'yellow')
   
   if (pos == 1) {
-    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'l', col=color,
+    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color,
       xlim = c(0, 1), ylim = c(0, 1),
       xlab = '% buenos eliminados', ylab = '% malos eliminados',
       main = 'Curva ROC', lwd=lwd)
     lines(c(0, 1), c(0, 1), col = 'red', lty = 3)
   } else{
     par(new=TRUE)
-    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'l', col=color,
+    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color, 
       xlim = c(0, 1), ylim = c(0, 1), lwd=lwd,
       ann = FALSE, axes = FALSE)
   }

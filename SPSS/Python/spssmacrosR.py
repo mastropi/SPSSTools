@@ -15,6 +15,14 @@ Author: Daniel Mastropietro"""
 # 2013/12/11: Created new function RCopyVariables() to copy Python variables into the R environment.
 #             Still I was not able to figure out how to extract the variable name and its value from the parameter passed...
 #             (See my comments in the function below).
+# 2014/03/08: In BuildVarListAndString() function,
+#             Added a new parameter 'dedup' so that the list of names are not dedupped. This is needed for example by
+#             the RDistributionsByGroup() function when parsing the value of parameter 'transforms' which may have duplicates
+#             (since it does NOT contain a variable list but a set of transformation to apply to the variables, which may be the same
+#             for different variables!)
+#             In RDistributionsByGroup() function,
+#             Fixed the error arising when passing parameter 'transforms' and occuring since the BuildVarListAndString() function was
+#             changed to dedup names passed. The error was fixed by calling BuildVarListAndString() with sort=False and dedup=True
 #
 
 # TODO:
@@ -56,9 +64,9 @@ __all__ = [ "BuildVarListAndString",
 # following added functionalities:
 # - it removes blank spaces or empty lines at the beginning or end of parameter 'vars' that would otherwise be considered as
 # an empty variable name.
-# - it dedups the list of names passed in 'vars' (by keeping its original order!)
+# - if requested, it dedups the list of names passed in 'vars' (by keeping its original order!)
 # - it removes blank spaces at the beginning or end of each identified variable name
-def BuildVarListAndString(vars, sort=False):
+def BuildVarListAndString(vars, sort=False, dedup=True):
     # Convert the variable names to a list (in case they are not a list already)
     varlist = spssaux._buildvarlist(vars)
 
@@ -78,8 +86,8 @@ def BuildVarListAndString(vars, sort=False):
         ## method does NOT exist.
         ## (probably his document is valid for an older version of spssaux since its dated 2007...)
 
-    # If no sort is requested, remove duplicates by keeping the order in which the variables are passed
-    if not(sort):
+    # If no sort and dedup are requested, remove duplicates by keeping the order in which the variables are passed
+    if not(sort) and dedup:
         varlistOrig = varlist
         # Remove duplicates
         varlist = [v for v in set(varlist)]
@@ -91,10 +99,12 @@ def BuildVarListAndString(vars, sort=False):
         # Re-create the list with no duplicates in the original order
         varlist = [varlistOrig[i] for i in indices]
     else:
-        # Remove duplicates
-        varlist = [v for v in set(varlist)]
-        # Sort the list if requested
-        varlist.sort()
+        if dedup:
+            # Remove duplicates
+            varlist = [v for v in set(varlist)]
+        if sort:
+            # Sort the list if requested
+            varlist.sort()
 
     # Create variable list as a new-line-separated string and removes any blank spaces before or after its name
     # Note that I explicitly convert each element of 'varlist' to string in case the values in vars are numbers  (e.g. percentiles list as passed to Summary())
@@ -228,6 +238,9 @@ cat("\t", typeof(%(varR)s),"variable created in R.\n")
 #           small (which means that the graph is sent directly to the SPSS output window) or large (which means that the graph is first
 #           saved as a large JPEG file and then sent to the SPSS output window). The reason for adding this parameter is that showing
 #           large graphs when plotting only one variable makes its color be a little washed out, difficulting its visibility.
+#           2013/03/08
+#           - Fixed an error arising when passing parameter 'transforms' and occuring since the BuildVarListAndString() function has been
+#           changed to dedup names passed. The error was fixed by adding a new parameter 'dedup' to the function.
 #
 # TODO:
 # 2013/08/29: Add a check whether the variables passed by the user exist in the dataset
@@ -328,8 +341,8 @@ execute.""" %locals()
         groupvars = ""
         
     #-- TRANSFORMS and VALUELABELS
-    transList, transforms = BuildVarListAndString(transforms)
-    valueLabelList, valueLabels = BuildVarListAndString(valueLabels)
+    transList, transforms = BuildVarListAndString(transforms, sort=False, dedup=False)
+    valueLabelList, valueLabels = BuildVarListAndString(valueLabels, sort=False, dedup=False)    
 
     #-- ALLTOGETHER Flags
     if alltogetherVars and len(varlist) > 1:
