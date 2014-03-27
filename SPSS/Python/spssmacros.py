@@ -152,8 +152,8 @@ from numpy import *     # I use this import formula here because there are many 
                         # a matrix with zeros)
                         
 ### My imports
-# Global variables used at NAT
-from natglobals import tempdir_
+# Global variables used in this code (e.g. tempdir_, Rdir_)
+from natglobals import *
 # Import auxiliay functions
 from dmspssaux import CheckVariables, BuildVarListAndString, Save
 

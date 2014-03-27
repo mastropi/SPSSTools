@@ -25,6 +25,9 @@
 #								- safeLogInv(): computes the inverse of the safeLog() function
 #								- logitInv(): computes the inverse of the logit() function available in the car package
 #								- plot.cdf(): plots the CDF of a variable
+# - 2014/03/26: Created function:
+#								- plot.bar(), plot.bars(): makes a bar plot of a target variable in terms of categorical variable
+#									where the bar widths are proportional to the number of cases in each category.
 #
 
 # TODO:
@@ -276,6 +279,7 @@ logitInv = function(x, adjust=0)
 # pairsXAxisPosition
 # pairsYAxisPosition
 # plot.axis
+# plot.bar		(NEW Mar-2014)
 # plot.binned
 # plot.cdf		(NEW Mar-2014)
 # plot.dist (in construction, which calls panel.dist --when finalized should I remove the 'add' parameter form panel.dist() --because this is a panel function--, or should I leave it anyway (with default value always add=TRUE)? perhaps leave it...)
@@ -1070,7 +1074,9 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
   if (is.null(paramsList$oma)) paramsList$oma = c(2,3,2,3)
 
 	# Limit the number of panels on each plot to the value specified in 'max.panels'
-	if (ncol(x) > max.panels) {
+  imax = ncol(x)
+  nplots = ceiling(imax/max.panels)
+	if (nplots > 1) {
 		# Define the first column with input variables to plot in the pairs plot (i.e without considering any target variable passed by the user)
 		if (!is.null(paramsList$target)) {
 			# It is assumed that the target variable is at the first column of x
@@ -1080,10 +1086,10 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 			# First independent variable to plot
 			i = 2
 		} else {
+			target = NULL
+			# First independent variable to plot
 			i = 1
 		}
-		imax = ncol(x)
-		nplots = ceiling(imax/max.panels)
 		if (!is.null(target)) {
 			# The number of panels per pairs plot is max.panels + 1
 			cat("For better view, the pairs plot is divided into", nplots, "plots of", max.panels+1, "panels each.\n")
@@ -1445,8 +1451,8 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 # Created:      12-Mar-2014
 # Modified:     12-Mar-2014
 # Description:  Plot CDF of a numeric variable in the quantiles specified in parameter 'probs'
-# Details:			The parameter probs comes the named parameter in function quantile()
-# Parameters:   x: An numeric array
+# Details:			The parameter probs corresponds to the parameter of the same name in function quantile()
+# Parameters:   x: A numeric array
 # Output:       A matrix containing the CDF of x where the row names are the quantile values defined in 'probs'.
 # Assumptions:  There are no missing values (NA) in the data!
 {
@@ -1485,6 +1491,140 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 	plot(x.cdf, cdf.values, type=type, xlab=xlab, ylab=ylab, xaxt=xaxt, yaxt=yaxt, main=main, ...)
 	
 	return(as.matrix(x.cdf))
+}
+
+plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE, horiz=FALSE, bars=TRUE, width=1, cex=0.8, las=1, col.bars="black", plot=TRUE, ...)
+# Created:      26-Mar-2014
+# Modified:   	26-Mar-2014
+# Description: 	Make a Bar Plot of a categorical variable x showing the average of a target variable y,
+#								where the width of the bars are proportional to the size of each x category.
+# Parameters:   - x: Either a character or numeric array corresponding to a categorical variable, or a matrix containing  the
+#									data (already aggregated) to plot. In the latter case, the columns of x should contain columns named as:
+#									- the value of parameter 'event'
+#									- "n" (with the number of cases per category)
+# 								- "sd" (with the standard deviation of the target variable to plot per category --note that this value
+#										should NOT be already divided by sqrt(n))
+#								- y: A character or numeric variable that represents some target variable of interest.
+#								- event: Value taken by the y variable representing an event of interest (e.g. "1" for a binary 0/1 variable)
+#								- FUN: Function to use to apply to the (x, y) pair. It can be either "table" or any other function that is
+#									accepted by the aggregate() function that applies to numeric variables. In the latter case, the y variable
+#									must be numeric.
+#									When FUN=="table", table(x,y) is computed and the proportion of occurrence of 'event' in the y variable is plotted as a bar plot.
+#									In all other cases, aggregate(y ~ x, FUN=FUN, na.rm=TRUE) is computed and the resulting value of the y variable is plotted as a bar plot.
+#								- decreasing: how the x categories should be sorted in the bar plot. Either TRUE, FALSE or NA (alphabetical order).
+#								- horiz: Whether the bar plot should show horizontal or vertical bars (same parameter used by barplot())
+#								- bars: Whether to show error bars proportional to the SE of y on each bar.
+#								- width: Width of the error bars as multiplier of the SE of y.
+#								- cex: Character expansion value to use in the bar plot (parameter cex.names of barplot())
+#								- las: Label orientation for the x category axis (parameter las of barplot())
+#								- col.bars: Color to use for the error bars
+#								- plot: Whether to generate the plot or just return the table with the data to be plotted
+#								- ...: Additional parameters to be passed to graphical functions called (bars(), segments(), points())
+# Output:       A bar plot is generated where the x categories are sorted by decreasing number of cases.
+#								An matrix containing the following columns:
+#								- The x categories
+#								- The number of non-missing cases in each category
+#								- The average value of y and its standard error in each category
+# Assumptions:  None
+{
+	tab = NULL
+
+	# Check if parameter x is already a table containing the raw numbers of what should be plotted
+	if (is.matrix(x)) {
+		# The input matrix is considered to be already a computed table (i.e. the output of 
+		tab = x
+		if (!("n" %in% colnames(tab)) | (bars & !("sd" %in% colnames(tab)))) {
+			stop("Input parameter '", deparse(substitute(x)), "' does NOT contain the necessary column names ('n' and/or 'sd').\nColumn names are: ", colnames(x))
+		}
+		if (FUN == "table") {
+			xnames = row.names(tab)
+			ycol = event
+			if (!(event %in% colnames(tab))) {
+				stop("Input parameter '", deparse(substitute(x)), "' does NOT contain a column named '", event, "'\n")
+			}
+		} else {
+			xnames = tab[,1]
+			ycol = 2
+		}
+	}
+	
+	# Start computation in the case x is NOT a matrix
+	if (FUN == "table" & is.null(tab)) {
+		tab.counts = table(x, y)
+		tab = cbind(prop.table(tab.counts, margin=1), n=apply(tab.counts, 1, sum))
+		# Standard deviation of y using the probability of occurrence of 'event'
+		# (note that I don't yet divide by n this happens at the moment of plotting below)
+		tab = cbind(tab, sd=sqrt( tab[,2] * (1 - tab[,2]) ))
+		# Names to be used as x categories in the bar plot
+		xnames = row.names(tab)
+		# Column of 'tab' containing the values of y to plot
+		ycol = event
+	} else if (is.null(tab)) {
+		# The y variable is numeric and FUN is applied to its values to get a representative value for each x category
+		if (!is.numeric(y)) {
+			stop("Variable '", deparse(substitute(y)), "' is NOT numeric.\n")
+		} else {
+			tab = aggregate(y ~ x, FUN=FUN, na.rm=TRUE)
+			# Compute the number of non-missing cases in each x category.
+			# Note that the variable y can have missing values but these are not excluded from the count of non-missing values,
+			# only the non-missing values in x are of interest.
+			tab = cbind(tab, n=as.numeric(table(x)))			# Note that NAs are NOT part of the table() output
+			tab = cbind(tab, sd=aggregate(y ~ x, FUN=sd, na.rm=TRUE)[,2])
+			# Names to be used as x categories in the bar plot
+			xnames = tab[,1]
+			# Column of 'tab' containing the values of y to plot
+			ycol = 2
+			colnames(tab)[1:2] = c(deparse(substitute(x)), deparse(substitute(y)))
+		}
+	}
+
+	if (plot) {
+		### Bar plot
+		xlim = NULL
+		ylim = NULL
+		# Sort x categories as requested
+		if (!is.na(decreasing)) {
+			ord = order(tab[,ycol], decreasing=decreasing)
+		} else {
+			ord = 1:nrow(tab)
+		}
+		tab = tab[ord,]
+		xnames = xnames[ord]
+		# Set appropriate limits before calling barplot() when error bars are requested
+		if (bars) {
+			if (horiz) {
+				xlim = range(c(0, tab[,ycol], tab[,ycol] + width*tab[,"sd"]/sqrt(tab[,"n"])))
+			} else {
+				ylim = range(c(0, tab[,ycol], tab[,ycol] + width*tab[,"sd"]/sqrt(tab[,"n"])))
+			}
+		}
+		# Generate the bar plot and store the position of the center of each bar in 'barpos' so that we can add the error bars if requested
+		barpos = barplot(tab[,ycol], names.arg=xnames, horiz=horiz, cex.names=cex, width=tab[,"n"], xlim=xlim, ylim=ylim, las=las, ...)
+		if (bars) {
+			if (horiz) {
+				# Horizontal bars
+				x.upper = tab[,ycol] + width*tab[,"sd"]/sqrt(tab[,"n"])
+				x.lower = pmax(0, tab[,ycol] - width*tab[,"sd"]/sqrt(tab[,"n"]))
+				segments(x.lower, barpos, x.upper, barpos, lwd=2, col=col.bars, ...)
+				points(x.upper, barpos, pch="|", lwd=2, col=col.bars, ...)
+				points(x.lower, barpos, pch="|", lwd=2, col=col.bars, ...)
+			} else {
+				# Vertical bars
+				y.upper = tab[,ycol] + width*tab[,"sd"]/sqrt(tab[,"n"])
+				y.lower = pmax(0, tab[,ycol] - width*tab[,"sd"]/sqrt(tab[,"n"]))
+				segments(barpos, y.lower, barpos, y.upper, lwd=2, col=col.bars, ...)
+				points(barpos, y.upper, pch="_", lwd=2, col=col.bars, ...)
+				points(barpos, y.lower, pch="_", lwd=2, col=col.bars, ...)
+			}
+		}
+	}
+
+	# When x is not a matrix and FUN == "table" add the counts of each y value to the output table
+	if (!is.matrix(x) & FUN == "table") {
+		tab = cbind(tab.counts[ord,], tab)
+	}
+
+	return(tab)
 }
 ######################################### GRAPHICAL functions #################################
 

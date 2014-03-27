@@ -1,6 +1,6 @@
 # datamining-functions.r
 # Created: 		  03-Jul-2013
-# Modified: 	  25-Jul-2013
+# Modified: 	  26-Mar-2014
 # Author: 		  Daniel Mastropietro
 # Description: 	Set of Data Mining functions
 # Dependencies: startup-functions.r, from which the following functions are used:
@@ -12,6 +12,12 @@
 # Profiles, DistibutionsByGroup (these are the same function with 2 different names, the first is more easily remembered in data mining)
 # InformationValue
 # ScoreDistribution
+# F1
+
+# HISTORY:
+# - 2014/03/26: Created function:
+#								- F1(): computes the F1 value as taught at the Machine Learning course for binary target models.
+#
 
 ################################ Profiles, DistributionsByGroup ###############################
 # 2013/07/03
@@ -1456,3 +1462,57 @@ ScoreDistribution = function(
   }
 }
 ####################################### ScoreDistribution #####################################
+
+
+
+############################################## F1 #############################################
+F1 = function(y, pred, cut, print=FALSE) {
+# Created: 			16-Mar-2014
+# Author:				Daniel Mastropietro
+# Description:	Computes the F1 value for binary models for a given cutoff as taught at the Machine Learning course:
+#								F1 = 2*P*R/(P+R)
+#             	where P = Precision and R = Recall, i.e.
+#              	P = True Positives / Predicted Positives
+#             	R = True Positives / Observed Positives      (a.k.a Sensitivity)
+#	Parameters:		- y: vector of observed binary target
+#              	- pred: vector of predicted probabilities
+#              	- cut: cutoff value above which the event of interest is predicted (pred >= cut => prediction = event)
+#								- print: whether to show the 2x2 table of Observed vs. Predicted events for the chosen cutoff value.
+# Output: A list containing the cut value, the Precision, the Recall and the F1 values is returned
+#
+  
+  ### Observed values
+  # Observed Events
+  OE = as.numeric(y==1)
+  # Observed Non-Events
+#  ONE = as.numeric(y!=1)
+  
+  ### Predicted values
+  # Predicted Events
+  PE = as.numeric(pred >= cut)
+  # Predicted Non-Events
+#  PNE = as.numeric(pred < cut)
+  
+  ### Classification table
+  if (print) print(table(OE, PE))
+  
+  ### Precision, Recall and F1
+  TP = sum(PE==1 & PE==OE)
+  # Precision
+  if (sum(PE) == 0) {
+    precision = NA
+  } else {
+    precision = TP / sum(PE)      # Note: for cut = 0, precision = event rate! (because all predicted values are classified as "Event", therefore the True Positives gives the number of events => precision = TP/#cases = event rate)
+  }
+  # Recall
+  recall = TP / sum(OE)         # a.k.a sensitivity
+  # F1
+  if (is.na(precision) | (precision + recall) == 0) {
+    F1 = NA
+  } else {
+    F1 = 2*precision*recall / (precision + recall)
+  }
+
+  return(list(cut=cut, precision=precision, recall=recall, F1=F1))
+}
+############################################## F1 #############################################

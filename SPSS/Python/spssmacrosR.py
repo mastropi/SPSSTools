@@ -45,8 +45,8 @@ import operator
 import spssdata
 
 ### My imports
-# Global variables used at NAT
-from natglobals import tempdir_
+# Global variables used in this code (e.g. tempdir_, Rdir_)
+from natglobals import *
 
 # List of functions defined
 __all__ = [ "BuildVarListAndString",
@@ -130,7 +130,7 @@ def BuildVarListAndString(vars, sort=False, dedup=True):
 ########################## Auxiliary Python functions that execute R code #################################
 # 2013/07/24
 # Compile R functions called by the Python functions defined in this module
-def RSource(dir="Z:/Personales_Daniel_Mastropietro/code/R/"):
+def RSource(dir=Rdir_):
     """Create the syntax that 'source's the R codes in the specified directory"""
 
     # Note the use of .r$ as pattern so that only files ENDING in .r are returned (additional note: the '*' is NOT allowed in the pattern in version R-2.8.0, although it is allowed in version R-3.0.1)
