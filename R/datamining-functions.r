@@ -9,15 +9,205 @@
 #
 
 # INDEX:
+# GroupCategories
+# AssignCategories
 # Profiles, DistibutionsByGroup (these are the same function with 2 different names, the first is more easily remembered in data mining)
 # InformationValue
 # ScoreDistribution
 # F1
 
 # HISTORY:
-# - 2014/03/26: Created function:
+# - 2014/03/26: Created functions:
 #								- F1(): computes the F1 value as taught at the Machine Learning course for binary target models.
+#								- GroupCategories(): automatically groups contiguous categories of a categorical variable based on the value of a target variable.
+#								- AssignCategories(): assign categories of a categorical variable to new grouped categories into a new variable based on the output
+#									of GroupCategories().
 #
+
+
+######################################## GroupCategories ######################################
+# 2014/03/26
+# [DONE-2014/03/28] UNDER DEVELOPMENT: The code below works but needs to be setup as a function. It was tested in the Moni project.
+# The goal of this function is to group automatically contiguous categories of categorical variables based on 
+# Chi-Square test of 2x2 contingency table formed by x (the categorical variable under analysis) and y (the target variable of interest,
+# usually binary variable)
+# The user should have the option of specifying particular categories that they want to leave alone (i.e. do not group with others)
+# There is also a threshold of the number of cases (and percent of cases) that a category should have NOT to be grouped.
+# Too small of categories should be placed together with the MEAN group (i.e. with the group having average target value) or 
+# with a separate group called e.g. "Z-REST".
+# Ref: Moni project -> 2 Modeling.r
+#
+# TODO:
+# - 2014/03/26: Allow passing several input variables to analyze. In order to link this function with the AssignCategories() function,
+# the output of such call should be a LIST (e.g. called groupedCat). See the use of groupedCat in AssignCategories() below.
+GroupCategories = function(
+		x,								# Input categorical variable to analyze
+		y,								# Target variable,
+		type="cat",				# Type of categorical variable: "cat" or "cont"
+		stat="mean",			# Statistics to use for the computation of the representative value of y for each category of x
+		# Settings for merging consecutive categories
+		pthr = 0.50,			# Threshold for the p-value of the Chi-square test above which contiguous categories are merged
+		propthr = 0.01,		# Minimum proportion of cases (w.r.t. to total number of cases in dataset) to be observed in a category so that it can be let alone
+		nthr = 20,				# Minimum number of cases in a category so that it can be let alone
+		exclusions=NULL,	# Categories to be excluded from the merge (they should be left alone)
+											# *** NOTE: exclusions COULD ALSO BE WISHED TO BE ASSIGNED TO A SINGLE GROUP CALLED "Z-OTHER" ***
+		plot=TRUE					# Whether to plot the evolution of the merging
+)
+# Created:			27-Mar-2014
+# Author:				Daniel Mastropietro
+# Description:	Automatically group contiguous categories of a categorical variable based on the value of a target variable
+#								and a chi-square statistic.
+# Parameters:		(See above)
+# Output:				A list containing the original barplot of y vs. x in 'bar' and the new barplot of y vs. grouped x in 'outbars'.
+{
+	# Compute and plot the barplot that represents the average target variable vs. the categorical variable 
+	if (type == "cat") {
+		FUN = "table"
+	} else {
+		FUN = stat
+	}
+	bars = plot.bar(x, y, FUN=FUN, las=3, cex=0.5)
+
+	### Analyze grouping of contiguous categories
+	### *** AUTOMATIC GROUPING OF CATEGORIES! ***
+	# Compute the final minimum number of cases to let a category on its own
+	cat("Threshold for the minimum number of cases per category (based on parameters nthr ( =", nthr)
+	nthr = max(nthr, propthr*sum(bars[,1:2]))
+  cat(") and propthr ( =", propthr, ")):", nthr, "\n")
+	
+	# Start merging
+	lastmerged = -1
+	pvalues = NULL
+	groups = NULL
+	categories = rownames(bars)
+	j = 1;				# Index for the new grouping of categorical variable
+	groups[1] = "1"
+	xout = bars[,1:2]
+	for (i in 1:(nrow(bars)-1)) {
+		chisqt = chisq.test(xout[j:(j+1),], correct=TRUE)
+		pvalues[i] = chisqt$p.value
+    # Number of cases in currently analyzed category (or grouped categories)
+    ncases = sum(xout[j,])
+		if ((pvalues[i] >= pthr | ncases < nthr) & 
+				!(categories[i] %in% exclusions | categories[i+1] %in% exclusions)) {
+			if (lastmerged == i-1) {
+				groups[j] = paste(groups[j], i+1, sep=", ")
+			} else {
+				groups[j] = paste(i, i+1, sep=", ")
+			}
+			# Collapse rows j and j+1
+			xout[j,] = apply(xout[j:(j+1),], 2, FUN=sum)
+			rownames(xout)[j] = groups[j]
+			# Shift all remaining rows one row back
+			if (j+2 <= nrow(xout)) {
+				xout = xout[c(1:j, (j+2):nrow(xout)),]
+			} else {
+				xout = xout[1:j,,drop=FALSE]
+				## Note the use of drop=FALSE so that xout is still a matrix even when this subsetting from 1:j makes it have only one row (in case j = 1 and nrow(xout) = 2 prior to merging the categories)
+			}
+			lastmerged = i
+			if (plot) {
+			  height = prop.table(xout, margin=1)[,2]
+			  width = apply(xout, 1, sum)
+        barpos = barplot(height, width=width, horiz=FALSE, cex.names=0.5, las=3, main=paste("Step", i, ", p-value =", formatC(pvalues[i], digits=3), ", n =", ncases), cex=0.8)
+        text(barpos, height, labels=apply(xout, 1, sum), offset=0.5, pos=1, cex=0.8)
+			}
+		} else {
+			if (is.na(groups[j])) {
+				groups[j] = as.character(i) # singleton group, will label it with the row number i of bars
+			}
+			rownames(xout)[j] = groups[j]
+			j = j + 1
+			# Check if this is the last record of bars to process... in that case assign the name j to the singleton group
+			if (i == nrow(bars) - 1) {
+				groups[j] = as.character(i+1)
+				rownames(xout)[j] = groups[j]
+			}
+			if (plot) {
+        height = prop.table(xout, margin=1)[,2]
+        width = apply(xout, 1, sum)
+			  barplot(height, width=width, horiz=FALSE, cex.names=0.5, las=3, main=paste("Step", i, ", p-value =", formatC(pvalues[i], digits=3), ", n =", ncases), cex=0.8)
+			  text(barpos, height, labels=apply(xout, 1, sum), offset=0.5, pos=1, cex=0.8)
+			}
+		}
+	}
+	
+	# Add the p-value information to the output dataset
+	xout = cbind(xout, matrix(nrow=nrow(xout), ncol=length(pvalues)))
+	colnames(xout)[3:ncol(xout)] = paste("p", 3:ncol(xout)-2, sep="")
+	indmax = 0
+	subscripts = rownames(xout)
+  cat("\nGrouping of variable", deparse(substitute(x)), ":\n")
+	for (j in 1:nrow(xout)) {
+		ind = eval(parse(text=paste0("c(", subscripts[j], ")")))
+		# Categories in the current group
+		names = paste0("'", paste(rownames(bars)[ind], collapse="', '"), "'")
+		## Note that the first and last double quotes are NOT part of names, they are shown because 'names' is of type 'character'.
+		cat("Group", j, "(", length(ind), "):", names, "\n")
+		if (j == nrow(xout)) {
+			ind = ind[1:(length(ind)-1)]
+		}
+		indmax = max(indmax, length(ind))
+		xout[j,2+1:length(ind)] = pvalues[ind]
+	}
+	# Keep only the columns with non-missing pvalues 
+	xout = xout[,1:(2+indmax),drop=FALSE]
+  ## Note the use of drop=FALSE so that xout is still a matrix even when it has only one row.
+
+	# Final situation
+	if (plot) {
+		toplot = cbind(prop.table(xout[,1:2,drop=FALSE], margin=1), n=apply(xout[,1:2,drop=FALSE], 1, sum))
+		toplot = cbind(toplot, sd=sqrt(toplot[,"1"]*(1 - toplot[,"1"])))
+		plot.bar(toplot, main="Final grouping")
+	}
+	
+	return(list(bars=bars, outbars=xout))
+}
+######################################## GroupCategories ######################################
+
+
+
+####################################### AssignCategories ######################################
+AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
+# Created:			27-Mar-2014
+# Author:				Daniel Mastropietro
+# Description:	Create new categorical variables in a dataset which come from grouping of categories of old variables
+# Parameters:		- dat: dataset to modify
+#								- vars: string or array with the ORIGINAL variable names
+#								- newvars: string or array with the NEW variable names
+#								- newvalues: List containing the new values to assign to each grouped category in each variable in newvars.
+#								- groupedCat: list containing the output from a call to the GroupCategories() function.
+#									Each element of the list is the result of applying the GroupCategories() function to each variable in vars.
+# Output:				The dataset 'dat' is returned with each of the new variables specified in 'newvars' created.
+{
+	# Check if the variables passed were passed as arrays (length>1) or strings (length=1)
+	if (length(vars) == 1) { vars = unlist(strsplit(vars,"[ \n]")) }
+	if (length(newvars) == 1) { newvars = unlist(strsplit(newvars,"[ \n]")) }
+	
+	i = 0
+	for (v in vars) {
+		i = i + 1
+		newv = newvars[i]
+		cat("*** Variable", i, "of", length(vars), ":", v, "--->", newv, "***\n")
+		subscripts = rownames(groupedCat[[i]]$outbars)
+		names = rownames(groupedCat[[i]]$bars)
+		dat[,newv] = as.character(dat[,v])  # remove the factor attribute from v (o.w. the original levels are kept in newv)
+		for (j in 1:nrow(groupedCat[[i]]$outbars)) {
+			ind = eval(parse(text=paste0("c(", subscripts[j], ")")))
+			# Categories in the current group
+			names4group = names[ind]
+			#  if (newvalues[j] == "Z-REST") { newvalues[j] = paste0(newvalues[j], length(ind)) }
+			dat[dat[,v] %in% names4group, newv] = newvalues[[i]][j]
+			cat("Group", j, "(", length(ind), "):\n", paste(names4group, collapse="\n\t"), "\n")
+			cat("\t---> assigned to:", newvalues[[i]][j], "\n\n")
+		}
+	}
+	
+	return(dat)
+}
+####################################### AssignCategories ######################################
+
+
 
 ################################ Profiles, DistributionsByGroup ###############################
 # 2013/07/03

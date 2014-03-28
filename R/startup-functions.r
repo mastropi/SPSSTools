@@ -1588,7 +1588,8 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 		} else {
 			ord = 1:nrow(tab)
 		}
-		tab = tab[ord,]
+		tab = tab[ord,,drop=FALSE]
+    ## Note the use of drop=FALSE so that tab is still a matrix even when it has only one row
 		xnames = xnames[ord]
 		# Set appropriate limits before calling barplot() when error bars are requested
 		if (bars) {
@@ -1600,6 +1601,13 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 		}
 		# Generate the bar plot and store the position of the center of each bar in 'barpos' so that we can add the error bars if requested
 		barpos = barplot(tab[,ycol], names.arg=xnames, horiz=horiz, cex.names=cex, width=tab[,"n"], xlim=xlim, ylim=ylim, las=las, ...)
+		# Add the number of cases per category above each bar
+		if (horiz) {
+			# Horizontal bars
+			text(tab[,ycol], barpos, labels=tab[,"n"], offset=0.5, pos=2, cex=0.8)
+		} else {
+			text(barpos, tab[,ycol], labels=tab[,"n"], offset=0.5, pos=1, cex=0.8)
+		}
 		if (bars) {
 			if (horiz) {
 				# Horizontal bars
