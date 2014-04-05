@@ -11,10 +11,11 @@
 # INDEX:
 # GroupCategories
 # AssignCategories
-# Profiles, DistibutionsByGroup (these are the same function with 2 different names, the first is more easily remembered in data mining)
+# Profiles, DistributionsByGroup (these are the same function with 2 different names, the first is more easily remembered in data mining)
 # InformationValue
 # ScoreDistribution
 # F1
+# ModelFit, model.fit
 
 # HISTORY:
 # - 2014/03/26: Created functions:
@@ -22,6 +23,8 @@
 #								- GroupCategories(): automatically groups contiguous categories of a categorical variable based on the value of a target variable.
 #								- AssignCategories(): assign categories of a categorical variable to new grouped categories into a new variable based on the output
 #									of GroupCategories().
+# - 2014/03/30: Created function:
+#								- ModelFit(), model.fit(): evaluates the model fit of a binary or continuous target by each input variable in a set of variables.
 #
 
 
@@ -38,20 +41,31 @@
 # Ref: Moni project -> 2 Modeling.r
 #
 # TODO:
+# -[DONE-2014/04/02] 2014/03/26: Allow an option to assign categories with too few cases to the same "other" group.
 # - 2014/03/26: Allow passing several input variables to analyze. In order to link this function with the AssignCategories() function,
 # the output of such call should be a LIST (e.g. called groupedCat). See the use of groupedCat in AssignCategories() below.
+# - 2014/04/02: Allow passing the value of an existing x category (e.g. "ZZZ-OTHER") where all categories with small size should be absorbed.
 GroupCategories = function(
-		x,								# Input categorical variable to analyze
-		y,								# Target variable,
-		type="cat",				# Type of categorical variable: "cat" or "cont"
-		stat="mean",			# Statistics to use for the computation of the representative value of y for each category of x
+		x,									# Input categorical variable to analyze
+		y,									# Target variable,
+		decreasing=TRUE,		# How the x categories should be sorted for the analysis based on the y values. Either TRUE (by decreasing y), FALSE (by increasing y) or NA (alphabetical order)
+		type="cat",					# Type of categorical variable: "cat" or "cont"
+		event="1",					# Event of interest of categorical variable y when type="cat"
+		stat="mean",				# Statistics to use for the computation of the representative value of y for each category of x when type != "cat"
+		varname=NULL,				# Name of the analyzed variable (useful when calling this function from within a FOR loop where x is passed as tofit[,v], where e.g. v = "x1"
 		# Settings for merging consecutive categories
-		pthr = 0.50,			# Threshold for the p-value of the Chi-square test above which contiguous categories are merged
-		propthr = 0.01,		# Minimum proportion of cases (w.r.t. to total number of cases in dataset) to be observed in a category so that it can be let alone
-		nthr = 20,				# Minimum number of cases in a category so that it can be let alone
-		exclusions=NULL,	# Categories to be excluded from the merge (they should be left alone)
-											# *** NOTE: exclusions COULD ALSO BE WISHED TO BE ASSIGNED TO A SINGLE GROUP CALLED "Z-OTHER" ***
-		plot=TRUE					# Whether to plot the evolution of the merging
+		pthr=c(0.50,0.10),	# Threshold for the p-value of the Chi-square test above which contiguous categories are merged
+												# Defaults to 0.5 for a categorical target and to 0.1 for continuous target
+		propthr=0.01,				# Minimum proportion of cases (w.r.t. to total number of cases in dataset) to be observed in a category so that it can be let alone
+		nthr=20,						# Minimum number of cases in a category so that it can be let alone
+		othergroup=TRUE,		# Whether categories with too few cases (n < nthr) should be sent to the "other" group or instead joined to the category of the LEFT.
+		exclusions=NULL,		# Categories to be excluded from the merge (they should be left alone)
+												# *** NOTE: exclusions COULD ALSO BE WISHED TO BE ASSIGNED TO A SINGLE GROUP CALLED "other" (note the small caps becase capital letters come before non-capital letters in the ASCII coding!) ***
+		# Output settings
+		print=TRUE,					# Whether to print messages about the merging of the categories and its properties
+		plot=TRUE,					# Whether to plot the evolution of the merging
+		cex=0.8,						# Character expansion factor for annotations in the plots except for the cex.names option of barplot()
+		cex.names=0.6				# Character expansion factor for the names (values of categorical variable) of the barplot
 )
 # Created:			27-Mar-2014
 # Author:				Daniel Mastropietro
@@ -60,107 +74,454 @@ GroupCategories = function(
 # Parameters:		(See above)
 # Output:				A list containing the original barplot of y vs. x in 'bar' and the new barplot of y vs. grouped x in 'outbars'.
 {
-	# Compute and plot the barplot that represents the average target variable vs. the categorical variable 
+	#--------------------------------- Auxiliary functions --------------------------------------
+	# Test the difference between contiguous groups in terms of target variable
+	# - for categorical target: chi-square test
+	# - for continuous target: t test
+	fxTestDiff = function(x, type)
+	# Input: x: a matrix with 2 rows and the columns needed for testing.
+	#						In the categorical case these columns are the counts of non-event and event of interest
+	#						In the continuous case these columns are the mean of the target variable, the counts n and the standard error .
+	# 			 type: the type of the target variable defining the test to perform:
+	#						when "cat": chi-square test (categorical target)
+	#						o.w.: one-sided t test (contintuous target)
+	# Output: a vector containing the updated columns of the input x
+	{
+		if (type == "cat") {
+			# Do a chi-square test of independence between the two rows of x and the value of the target variable
+			chisqt = chisq.test(x, correct=TRUE)		# correct=TRUE implies to do a correction for continuity
+			pvalue = chisqt$p.value
+		} else {
+			# Compute a one-sided p-value for the t test to compare the mean values of the two rows in x
+			# The t test is one-sided because the categories are assumed sorted from larger value of the target variable to smaller value.
+			# Note that the t test is performed assuming that the statistic summarizing the target variable in each category is the mean
+			mu1 = x[1,colmean]; std1 = x[1,colstd]; n1 = x[1,coln]
+			mu2 = x[2,colmean]; std2 = x[2,colstd]; n2 = x[2,coln]
+			# Standard Deviation of the two samples (pooled variance) and standard error of the difference of means
+			std = sqrt( ((n1-1)*std1^2 + (n2-1)*std2^2) / (n1 + n2 - 2) )
+			se = std * sqrt(1/n1 + 1/n2)
+			df = n1 + n2 - 2
+			pvalue = 1 - pt((mu1 - mu2)/se, df)
+		} 
+		
+		return(pvalue)
+	}
+	
+	# Collapse contiguous groups
+	fxCollapseGroups = function(x, type)
+	# Input: x: a matrix with 2 rows and the columns to update after collapsing
+	# 			 type: the type of collapsing to do: "cat" for categorical target variable; any other value for continuous target variable
+	# Output: a vector containing the updated columns of the input x
+	{
+		# Initialize the output of the function
+		xout = array(NA, dim=ncol(x)); dimnames(xout) = list(colnames(x))		# dimnames of an array should be defined as a a list...(!)
+		
+		if (type == "cat") {
+			# Sum vertically
+			xout = apply(x, 2, FUN=sum)
+		} else {
+			# Update mean of y by doing a weighted sum (by the number of cases in each group being merged)
+			# (note that we are summing vectors and we don't need apply())
+			xout[colmean] = sum(x[,colmean] * x[,coln]) / sum(x[,coln])
+			# Update the standard error of mean(y) (assuming pooled variance, as: se = sqrt( (std1^2*n1 + std2^2*n2 ) / (n1 + n2) )
+			# (note that we are summing vectors and we don't need apply())
+			xout[colstd] = sqrt( sum(x[,colstd]^2 * (x[,coln]-1)) / (sum(x[,coln]) - 2) )
+			# Compute the counts in the new group
+			# (note that we are summing vectors and we don't need apply())
+			xout[coln] = sum(x[,coln])
+		}
+
+		return(xout)
+	}
+
+	# Plot the updated bar plot. I define it as a function because it is called twice from the main function
+	fxPlot = function(x, type)
+	# Input: x: a matrix where the row names are the different x categories to plot and 
+	# 			 type: the type of the target variable defining how to compute the height of the bars to plot:
+	#						when "cat": height = proportion of events (categorical target)
+	#						o.w.: representative value of the target in each category (e.g. mean) (contintuous target)
+	# 			 type: the type of collapsing to do: "cat" for categorical target variable; any other value for continuous target variable
+	# Output: none
+	{
+		if (type == "cat") {
+			height = prop.table(x[,col4ncases,drop=FALSE], margin=1)[,2]
+			width = apply(x[,col4ncases,drop=FALSE], 1, sum)
+		} else {
+			height = x[,colmean]
+			width = x[,coln]
+		}
+		barpos = barplot(height, width=width,
+										 horiz=FALSE, las=3,
+										 main=paste("Step", i, "; p-value", asterisk.pvalue, "=", formatC(pvalue, digits=3), "; n", asterisk.ncases, "= (", ncases.left, ",", ncases.right, ")"),
+										 cex.names=cex.names,
+										 cex.main=cex,
+										 cex=cex)
+		text(barpos, height, labels=width, offset=0.5, pos=1, cex=cex)
+	}
+	#--------------------------------- Auxiliary functions --------------------------------------
+
+
+	#---------------------------------- Graphical settings --------------------------------------
+	opar = par(no.readonly=TRUE)
+	on.exit(par(opar))
+	par(mar=c(5.5,2,2,1), xpd=TRUE)		# xpd=TRUE => clip all the plotting to the figure region (as opposed to the plot region) so that labels showing the number of cases in each bar are always seen)
+	#---------------------------------- Graphical settings --------------------------------------
+
+
+	#---------------------- Initial bar plot and threshold definition ---------------------------
+	# Compute and plot (if requested) the barplot that represents the average target variable vs. the categorical variable 
 	if (type == "cat") {
 		FUN = "table"
+		if (missing(pthr)) pthr = 0.50
 	} else {
 		FUN = stat
+		if (missing(pthr)) pthr = 0.10
 	}
-	bars = plot.bar(x, y, FUN=FUN, las=3, cex=0.5)
+	bars = plot.bar(x, y,
+									event=event, FUN=FUN, las=3,
+									decreasing=decreasing,
+									main=paste("Initial categories of variable", ifelse(!is.null(varname), varname, deparse(substitute(x)))),
+									cex.names=cex.names,
+									cex.main=cex,
+									cex.axis=cex,
+									plot=plot)
 
-	### Analyze grouping of contiguous categories
-	### *** AUTOMATIC GROUPING OF CATEGORIES! ***
 	# Compute the final minimum number of cases to let a category on its own
 	cat("Threshold for the minimum number of cases per category (based on parameters nthr ( =", nthr)
-	nthr = max(nthr, propthr*sum(bars[,1:2]))
-  cat(") and propthr ( =", propthr, ")):", nthr, "\n")
+	nthr = ceiling(max(nthr, propthr*sum(bars[,"n"])))
+  cat(" ) and propthr ( =", propthr, ")):", nthr, "\n")
+	#---------------------- Initial bar plot and threshold definition ---------------------------
+
+
+	#--------------------------------- Merging process ------------------------------------------
+	### Initializations
+	# Initialize the output matrix xout
+	if (type == "cat") {
+		# Keep the necessary columns of 'bars' for the processing
+		xout = bars[,1:2]
+			## 'bars', the output of plot.bar() above, is assumed to have the following columns:
+			## 1: count of non-event cases (of y)
+			## 2: count of event cases (of y)
+			## 3: proportion of non-event cases (of y)
+			## 4: proportion of event cases (of y)
+			## 5: count of non-missing cases in each category
+			## 6: standard error of the proportion of both non-event and event cases (of y)
+		col4ncases = 1:2		# Columns in xout containing the values to sum to get the total number of cases per xout category/group
+												# These contain the counts of the two categories of the target variable resulting from the plot.bar() function:
+												# non-'event' and 'event'. Ex: typically 0 and 1
+												# Note that the target variable may have more than 2 categories but it is collapsed to 2 categories of interest
+												# by the plot.bar() function above.
+		if (print) {
+			cat("The target variable is considered categorical.\n")
+			cat("A chi-square test is used to compute the p-value for whether differences exist between contiguous categories of the input variable in terms of the target variable.\n")
+		}
+	} else {
+		# Set the row names of bars to be the x categories
+		# (this is important for the final list of the groups obtained which uses rownames(bars))
+		rownames(bars) = bars[,1]
+
+		# Keep the necessary columns of 'bars' for the processing
+		xout = bars[,2:ncol(bars)]
+			## 'bars', the output of plot.bar() above, is assumed to have the following columns:
+			## 1: x categories values
+			## 2: "mean" of y
+			## 3: count of non-missing cases in each category
+			## 4: standard deviation of y (i.e. NOT the standard error of the mean but the standard deviation of the values!)
+		colnames(xout)[1] = "mean"
+		colmean = "mean"		# Name of the column in xout containing the (assumed) mean value of y for the t test
+												# It should be the mean of y for each x category, although any statistic is accepted and a warning is issued if it is not the mean.
+		coln = "n"					# Name of the column in xout containing the counts in each x category
+		colstd = "sd"				# Name of the column in xout containing the standard deviation of y for each x category
+		col4ncases = coln		# Columns of xout containing the values to sum to get the total number of cases per xout category/group
+												# In the continuous target case, this is just one column containing the category/group counts and stored in xout[,coln]
+		if (FUN != "mean") {
+			# Issue a warning when the statistic passed in 'stat' is NOT "mean", since still the one-sided t-test p-value is computed
+			# and used to decide whether contiguous categories should be merged.
+			cat("GROUPCATEGORIES: WARNING - The statistic computed of the target variable for each category of the indendent variable is NOT the mean\n")
+			cat("The p-value for the one-sided t-test is still computed to analyze if differences exist.\n")
+			cat("This test is supposed to be valid only when the statistic is the mean.\n")
+		} else if (print) {
+			cat("The target variable is considered continuous.\n")
+			cat("A one-sided t test is used to compute the p-value for whether differences exist between contiguous categories of the input variable in terms of the target variable.\n")
+			cat("A pooled variance approach is used for the variance of the difference and to determine the degrees of freedom of the test.\n")
+		}
+	}
+	cat("\nTwo contiguous groups are merged when the p-value of test is >=", pthr, "\n")
+	if (othergroup) {
+		cat("Categories with too few cases (n <", nthr, ") are put together into a separate 'other' group.\n")
+	} else {
+		cat("Categories with too few cases (n <", nthr, ") are merged to the category to the LEFT.\n")
+	}
 	
-	# Start merging
-	lastmerged = -1
-	pvalues = NULL
-	groups = NULL
-	categories = rownames(bars)
-	j = 1;				# Index for the new grouping of categorical variable
-	groups[1] = "1"
-	xout = bars[,1:2]
-	for (i in 1:(nrow(bars)-1)) {
-		chisqt = chisq.test(xout[j:(j+1),], correct=TRUE)
-		pvalues[i] = chisqt$p.value
+	# Initialize arrays needed for the process
+	categories = rownames(xout)							# Store the original x categories
+	groups = array(NA, dim=nrow(bars))			# There will be at most as many merged groups as the nro. of categories in the original x variable.
+	pvalues = array(NA, dim=nrow(bars)-1)		# There will be at most (no. categories - 1) p-values for the tests of difference between contiguous groups
+	i = 1																		# i stores the index corresponding to the last x category present in the LEFT category/group being analyzed for potential merging
+	i4test = 1															# i4test contains the index for the pvalues array.
+																					# Its value is always equal to i but I define it as a separate variable to increase code clarity.
+	j = 1																		# j stores the index of xout corresponding to the LEFT category/group being analyzed for potential merging
+	groups[1] = 1														# Value initially assigned to the first output group
+
+	# Initialize the "other" group (only used when othergroup = TRUE)
+	# Create 'xother', a vector of length equal to the number of columns of xout to store the characteristics of the "other" group
+	# where all categories with too small number of cases are grouped (when othergroup = TRUE)
+	# The rownames of 'xother' will store the list of the original x categories that go to the new "other" category,
+	# which during the process is temporarily store in variable 'ogroups'
+	xother = array(0, dim=ncol(xout)); dimnames(xother) = list(colnames(xout))		# dimnames of an array are defined as a list...(!)
+	ogroups = NULL		# Variable to temporarily store the list of categories that fall into the new group "other"
+	
+	### Start looping on the rows of the matrix of new groups 'xout'
+	while (j < nrow(xout)) {
+		# Left and right x categories being compared
+		# (in general, the left category may just be the last x category existing in the GROUP to the left (when merges have already occurred))
+		ileft = i
+		iright = which(categories==rownames(xout)[j+1])
+
+		# Assign a value to RIGHT category/group of the xout output matrix (groups[j+1])
+		# This category/group could potentially be merged with the LEFT category/group (groups[j]) or o.w. sent to the "other" group.
+		# Currently (2014/04/02) the next output category/group is just an x category (as observed by looking at the value assigned
+		# to groups[j+1], which is iright, computed above), but I store this value in groups[j+1] forseeing a future development
+		# where one could merge starting from both ends and stop at the mid-position categories
+		# (this might improve the identification of different groups...?)
+		groups[j+1] = iright
+
+		# Test the difference between contiguous xout categories/groups in terms of the target variable
+		pvalues[i4test] = fxTestDiff(xout[j:(j+1),], type)
+		# Store the current p-value to be shown later at the plot title
+		pvalue = pvalues[i4test]
+
     # Number of cases in currently analyzed category (or grouped categories)
-    ncases = sum(xout[j,])
-		if ((pvalues[i] >= pthr | ncases < nthr) & 
-				!(categories[i] %in% exclusions | categories[i+1] %in% exclusions)) {
-			if (lastmerged == i-1) {
-				groups[j] = paste(groups[j], i+1, sep=", ")
+    ncases.left  = sum(xout[j,  col4ncases])		# Number of cases in LEFT group
+    ncases.right = sum(xout[j+1,col4ncases])		# Number of cases in RIGHT group
+
+    # Evaluate what conditions are satisfied for grouping
+    # (either p-value is too large or ncases.left or ncases.right is too small when parameter othergroup = TRUE)
+    cond.pvalue = as.logical(min(pvalues[i] >= pthr, TRUE, na.rm=TRUE)); asterisk.pvalue = ifelse(cond.pvalue, "*", "")
+    	## The min() function to compute cond.pvalue is used to avoid problems when cond.pvalue is NA (which happens rarely when the chisq.test() above fails) 
+    cond.ncases = ncases.left < nthr | ncases.right < nthr; asterisk.ncases = ifelse(cond.ncases, "*", "")
+    cond.exclusion.left  = categories[ileft]  %in% exclusions 
+    cond.exclusion.right = categories[iright] %in% exclusions 
+
+		if (print) {
+			catstr = paste("Comparing x categories", ileft, "and", iright, ":")
+			tabstr = paste(rep(" ", nchar(catstr)), collapse="")
+			cat(catstr, " pvalue =",  formatC(pvalue, digits=3), "; n =", ncases.left, ",", ncases.right)
+		}
+
+		# MERGE OR NOT MERGE?
+		if ((cond.pvalue | cond.ncases) & !(cond.exclusion.left | cond.exclusion.right)) {
+			# Entering here means that the RIGHT category of x (iright) should be merged into a new group,
+			# either to the "other" group or to the LEFT category of x being analyzed (ileft). 
+			if (othergroup & cond.ncases) {
+				#----------------------- SEND CATEGORIES TO THE "OTHER" GROUP -------------------------
+				# Add the category/ies containing a small number of cases to xother and update the string 'ogroups'
+				# containing the indices of the x categories that are sent to the "other" group
+				ind2remove = NULL
+				if (ncases.left < nthr) {
+					if (print) cat("\n", tabstr, "--> LEFT category sent to OTHER group because size <", nthr, ":", rownames(xout)[j])
+					# Collapse the LEFT category/group to the "other" group 
+					xother = fxCollapseGroups(rbind(xother, xout[j,]), type)
+					ogroups = paste(ogroups, groups[j], 	sep=", ")
+					# Add row j to the vector of row indices to be removed from xout
+					ind2remove = j
+					# Go to the next x category since the current i category was sent to the "other" group
+					i = iright
+					# In this case the index for pvalues should be i (OK)
+					i4test = i
+					# Update the groups array to reflect that the group to process in the next loop, groups[j], is the next x category
+					# (which is now 'i', NOT 'i+1' since i has just been updated)
+					groups[j] = i
+				}
+				if (ncases.right < nthr) {
+					if (print) cat("\n", tabstr, "--> RIGHT category sent to OTHER group because size <", nthr, ":", rownames(xout)[j+1])
+					# Collapse the RIGHT category/group to the "other" group 
+					xother = fxCollapseGroups(rbind(xother, xout[j+1,]), type)
+					ogroups = paste(ogroups, groups[j+1], sep=", ")
+					# Add row j+1 to the vector of row indices to be removed from xout
+					ind2remove = c(ind2remove, j+1)
+					# Check if the previous group was also sent to the "other" group
+					# (this should only happen for the first (leftmost) group, since the LEFT group is either large enough
+					# or has been obtained by merging, operation that makes it even larger)
+					if (ncases.left < nthr) {
+						# If the previous group was also sent to the "other" group, it means that there is no longer a "previous" group
+						# to process in the next loop. In this case we should:
+						# - Indicate that the x category to process in the next loop is the x category that is to the right of the category
+						#   just sent to the "other" group => i = i + 1 (sum +1 and not +2 because i has been updated in the previous IF clause)
+						# - Update the value of the group representing the left category to be analyzed in the next loop
+						# 	to such x category => groups[j] = i (NOT i+1 because i has just been updated to i+1)
+						i = i + 1				# NOTE that in this case we should do i = i + 1, as opposed to i = iright (as in all other cases)
+														# because iright contains the value of i before updating since this i is already the RIGHT category
+														# being analyzed.
+						groups[j] = i
+					}
+					# Store the p-value for the test between the x category analyzed in this loop and the category just sent to the "other" group
+					# so that it is stored in the output table xout to return.
+					pvalues[i4test+1] = pvalue
+					# In this case the index for pvalues should be set to i-1 (because the next test will be between the i-th x category PRIOR to the update of i and the next x category)
+					i4test = i
+				}
+				# Remove the rows that were sent to the "other" group from xout since they should no longer be processed
+				# Note that j should NOT be updated after removing these rows...!
+				xout = xout[-ind2remove,,drop=FALSE]
+				if (print) cat("\n")
 			} else {
-				groups[j] = paste(i, i+1, sep=", ")
-			}
-			# Collapse rows j and j+1
-			xout[j,] = apply(xout[j:(j+1),], 2, FUN=sum)
-			rownames(xout)[j] = groups[j]
-			# Shift all remaining rows one row back
-			if (j+2 <= nrow(xout)) {
-				xout = xout[c(1:j, (j+2):nrow(xout)),]
-			} else {
-				xout = xout[1:j,,drop=FALSE]
-				## Note the use of drop=FALSE so that xout is still a matrix even when this subsetting from 1:j makes it have only one row (in case j = 1 and nrow(xout) = 2 prior to merging the categories)
-			}
-			lastmerged = i
-			if (plot) {
-			  height = prop.table(xout, margin=1)[,2]
-			  width = apply(xout, 1, sum)
-        barpos = barplot(height, width=width, horiz=FALSE, cex.names=0.5, las=3, main=paste("Step", i, ", p-value =", formatC(pvalues[i], digits=3), ", n =", ncases), cex=0.8)
-        text(barpos, height, labels=apply(xout, 1, sum), offset=0.5, pos=1, cex=0.8)
-			}
-		} else {
-			if (is.na(groups[j])) {
-				groups[j] = as.character(i) # singleton group, will label it with the row number i of bars
-			}
-			rownames(xout)[j] = groups[j]
-			j = j + 1
-			# Check if this is the last record of bars to process... in that case assign the name j to the singleton group
-			if (i == nrow(bars) - 1) {
-				groups[j] = as.character(i+1)
+				#------------------------------ MERGE CONTIGUOUS GROUPS -------------------------------
+				if (print) {
+					if (cond.ncases) {
+						cat("\n", tabstr, "--> Categories MERGED based on small group size(s) <", nthr, ":", rownames(xout)[j], ";", rownames(xout)[j+1], "\n")
+					} else if (cond.pvalue) {
+						cat("\n", tabstr, "--> Categories MERGED based on p-value >=", pthr, ":", rownames(xout)[j], ";", rownames(xout)[j+1], "\n")
+					}
+				}
+				# Name the new group that results from merging the 2 contiguous categories/groups
+				# (these groups are groups[j] which, if not resulting from an earlier merge, should be the i-th category of x
+				# and groups[j+1], which normaly is just the iright-th category of x)
+				groups[j] = paste(groups[j], groups[j+1], sep=", ")
+				# Collapse rows j and j+1
+				xout[j,] = fxCollapseGroups(xout[j:(j+1),], type)
 				rownames(xout)[j] = groups[j]
+				# Shift all remaining rows one row up
+				if (j+2 <= nrow(xout)) {
+					xout = xout[c(1:j, (j+2):nrow(xout)),,drop=FALSE]
+				} else {
+					xout = xout[1:j,,drop=FALSE]
+					## Note the use of drop=FALSE so that xout is still a matrix even when this subsetting from 1:j makes it have only one row (in case j = 1 and nrow(xout) = 2 prior to merging the categories)
+				}
+
+				# Set the next LEFT category to be the current RIGHT category of x
+				# (note that the RIGHT category may NOT be obtained by doing (LEFT category index)+1... as there could have been categories in between that were sent to the "other" group)
+				i = iright
+				i4test = i
 			}
-			if (plot) {
-        height = prop.table(xout, margin=1)[,2]
-        width = apply(xout, 1, sum)
-			  barplot(height, width=width, horiz=FALSE, cex.names=0.5, las=3, main=paste("Step", i, ", p-value =", formatC(pvalues[i], digits=3), ", n =", ncases), cex=0.8)
-			  text(barpos, height, labels=apply(xout, 1, sum), offset=0.5, pos=1, cex=0.8)
+		} else {	# MERGE OR NOT MERGE?
+			#--------------------------- NOT MERGE: FINALIZE NEW GROUP ------------------------------
+			if (print) {
+				if (cond.exclusion.left) {
+					cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], "(exclusion) ;", rownames(xout)[j+1], "\n")
+				} else if (cond.exclusion.right) {
+					cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], ";", rownames(xout)[j+1], "(exclusion)\n")
+				} else {
+					cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], ";", rownames(xout)[j+1], "\n")
+				}
+			}
+			# No merging should be carried out nor any category should be sent to the "other" group.
+			# Therefore a new group has been defined and I can finalize it in xout with its full name
+			# (specifying which original x categories are part of it)
+			rownames(xout)[j] = groups[j]
+			# The current new group is finalized and we can now go to the next group => increment j by 1
+			# Note that after updating j, groups[j] will have the value of groups[j+1] prior to updating j. Therefore groups[j] is NEVER missing.
+			j = j + 1
+
+			# Set the next LEFT category to be the current RIGHT category of x
+			# (note that the RIGHT category may NOT be obtained by doing (LEFT category index)+1... as there could have been categories in between that were sent to the "other" group)
+			i = iright
+			i4test = i
+		}
+
+		# Check if the current loop is the last loop of the process
+		# Note that this may happen because:
+		# (a) j has been just updated and now points to the last row of xout (from "NOT MERGE: FINALIZE NEW GROUP" section above)
+		# (b) all remaining rows of xout have been either eliminated or collapsed (from the other possible section above)
+		# In that case, do the following depending on whether the situation is (a) or (b)
+		# (a) check if the size of the last category/group in xout is large enough (compared to nthr) or should be merged with the previous group
+		# (b) assign the correct value for the last category/group in xout (showing which indices of the original x categories include)
+		# 		(note that this "correct value" is not assigned when the last group left in xout has NOT been merged and the last
+		#			 x category was sent to the "other" group because it is too small)
+		if (j == nrow(xout)) {
+			jlast = j
+			ncases = sum(xout[jlast,col4ncases])		# Sum horizontally
+			# Only cond.ncases (on the last category) is computed here because cond.pvalue cannot be TRUE at this last category
+			cond.ncases = ncases < nthr; asterisk.ncases = ifelse(cond.ncases, "*", "")
+			# Check if any of the two last groups are in the exclusions list
+	    cond.exclusion.left  = categories[ileft]  %in% exclusions 
+	    cond.exclusion.right = categories[iright] %in% exclusions 
+			if (cond.ncases & !(cond.exclusion.left | cond.exclusion.right)) {
+				groups[jlast-1] = paste(groups[jlast-1], groups[jlast], sep=", ")
+				# Collapse rows jlast-1 and jlast
+				xout[jlast-1,] = fxCollapseGroups(xout[(jlast-1):jlast,], type)
+				rownames(xout)[jlast-1] = groups[jlast-1]
+				# Eliminate the last row of xout because it has just been merged
+				xout = xout[1:(nrow(xout)-1),,drop=FALSE]
+			} else {
+				# When the last category is large enough leave it on its own
+				rownames(xout)[jlast] = groups[jlast]
+			}
+		}
+		if (plot) {
+			if (any(xother>0)) {
+				fxPlot(rbind(xout, xother), type)
+			} else {
+				fxPlot(xout, type)
 			}
 		}
 	}
-	
-	# Add the p-value information to the output dataset
+	# To finalize, place the "other" group as the last row of xout, if it has absorbed any of the original x categories
+	if (any(xother>0)) {
+		# Convert xother from array to matrix in order to assign row names
+		xother = t(as.matrix(xother))
+		# Store the content of 'ogroups' as rownames of 'xother'
+		# (note that I start considering the character at position 3 of 'ogroups' because the first two characters are ', '
+		# because of the algorithm used above when constructing its value --so that I avoid checking whether it is the first category
+		# being added to the ogroups string)
+		rownames(xother) = substring(ogroups,3)
+		# Add the xother group to xout
+		xout = rbind(xout, xother)
+	}
+
+	### Add the p-value information to the output dataset and display how the new groups are generated
+	# Extend the columns of xout
+	ncols = ncol(xout)
 	xout = cbind(xout, matrix(nrow=nrow(xout), ncol=length(pvalues)))
-	colnames(xout)[3:ncol(xout)] = paste("p", 3:ncol(xout)-2, sep="")
+	colnames(xout)[(ncols+1):ncol(xout)] = paste("p", 1:(ncol(xout)-ncols), sep="")
 	indmax = 0
 	subscripts = rownames(xout)
-  cat("\nGrouping of variable", deparse(substitute(x)), ":\n")
+  cat("\nGrouping of variable",  ifelse(!is.null(varname), varname, deparse(substitute(x))), ":\n")
 	for (j in 1:nrow(xout)) {
 		ind = eval(parse(text=paste0("c(", subscripts[j], ")")))
 		# Categories in the current group
-		names = paste0("'", paste(rownames(bars)[ind], collapse="', '"), "'")
-		## Note that the first and last double quotes are NOT part of names, they are shown because 'names' is of type 'character'.
-		cat("Group", j, "(", length(ind), "):", names, "\n")
-		if (j == nrow(xout)) {
+		xvalues = paste0("'", paste(rownames(bars)[ind], collapse="', '"), "'")
+			## Note that the first and last double quotes are NOT part of xvalues, they are shown because 'xvalues' is of type 'character'.
+		if (any(xother>0) & j == nrow(xout)) {
+			cat("Group (OTHER) (", length(ind), "):", xvalues, "\n")
+		} else {
+			cat("Group", j, "(", length(ind), "):", xvalues, "\n")
+		}
+		# Define the indices for retrieving the p-values of the merges or non-merges
+		if (j == nrow(xout) & !any(xother>0)) {
+			# When there is no "other" group, there is no p-value for the last x category, therefore eliminate it from 'ind'
+			# the array of indices on which to subset the array pvaalues below.
 			ind = ind[1:(length(ind)-1)]
 		}
 		indmax = max(indmax, length(ind))
-		xout[j,2+1:length(ind)] = pvalues[ind]
+		# Update xout
+		xout[j,ncols+1:length(ind)] = pvalues[ind]
 	}
 	# Keep only the columns with non-missing pvalues 
-	xout = xout[,1:(2+indmax),drop=FALSE]
-  ## Note the use of drop=FALSE so that xout is still a matrix even when it has only one row.
+	xout = xout[,1:(ncols+indmax),drop=FALSE]
+  	## Note the use of drop=FALSE so that xout is still a matrix even when it has only one row.
 
-	# Final situation
+	# Final grouping
 	if (plot) {
-		toplot = cbind(prop.table(xout[,1:2,drop=FALSE], margin=1), n=apply(xout[,1:2,drop=FALSE], 1, sum))
-		toplot = cbind(toplot, sd=sqrt(toplot[,"1"]*(1 - toplot[,"1"])))
-		plot.bar(toplot, main="Final grouping")
+		# When the "other" group exists (at the last row of xout) change temporarily its name for plotting to reflect that is the "other" group
+		if (any(xother>0)) {
+			rownames(xout)[nrow(xout)] = paste(rownames(xout)[nrow(xout)], "(OTHER)")
+		}
+		if (type == "cat") {
+			toplot = cbind(prop.table(xout[,1:2,drop=FALSE], margin=1), n=apply(xout[,1:2,drop=FALSE], 1, sum))
+			toplot = cbind(toplot, sd=sqrt(toplot[,"1"]*(1 - toplot[,"1"])))
+		} else {
+			toplot = cbind(rownames(xout), xout[,c(colmean,coln,colstd)])
+		}
+		plot.bar(toplot, FUN=FUN, main=paste("Final grouping (", ifelse(!is.null(varname), varname, deparse(substitute(x))), ")", sep=""), cex.names=cex.names, cex.main=cex, cex.axis=cex, las=3)
+
+		# Remove the "(OTHER)" keyword from the rownames of xout because this should contain just numbers referring to the indices
+		# of the original x categories! (otherwise for example running AssignCategories() on this output will fail)
+		if (any(xother>0)) {
+			rownames(xout)[nrow(xout)] = gsub("\\(OTHER\\)", "", rownames(xout)[nrow(xout)])
+		}
 	}
-	
+
 	return(list(bars=bars, outbars=xout))
 }
 ######################################## GroupCategories ######################################
@@ -178,7 +539,7 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 #								- newvalues: List containing the new values to assign to each grouped category in each variable in newvars.
 #								- groupedCat: list containing the output from a call to the GroupCategories() function.
 #									Each element of the list is the result of applying the GroupCategories() function to each variable in vars.
-# Output:				The dataset 'dat' is returned with each of the new variables specified in 'newvars' created.
+# Output:				The dataset 'dat' is returned containing the newly created variables specified in 'newvars'.
 {
 	# Check if the variables passed were passed as arrays (length>1) or strings (length=1)
 	if (length(vars) == 1) { vars = unlist(strsplit(vars,"[ \n]")) }
@@ -193,10 +554,10 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 		names = rownames(groupedCat[[i]]$bars)
 		dat[,newv] = as.character(dat[,v])  # remove the factor attribute from v (o.w. the original levels are kept in newv)
 		for (j in 1:nrow(groupedCat[[i]]$outbars)) {
-			ind = eval(parse(text=paste0("c(", subscripts[j], ")")))
+			ind = eval(parse(text=paste("c(", subscripts[j], ")", sep="")))
 			# Categories in the current group
 			names4group = names[ind]
-			#  if (newvalues[j] == "Z-REST") { newvalues[j] = paste0(newvalues[j], length(ind)) }
+			#  if (newvalues[j] == "Z-REST") { newvalues[j] = paste(newvalues[j], length(ind), sep="") }
 			dat[dat[,v] %in% names4group, newv] = newvalues[[i]][j]
 			cat("Group", j, "(", length(ind), "):\n", paste(names4group, collapse="\n\t"), "\n")
 			cat("\t---> assigned to:", newvalues[[i]][j], "\n\n")
@@ -1062,6 +1423,15 @@ if (save) {
 # - 2014/01/03: Add a weight parameter to compute a weighted Information Value. This need came about during the fit of the NBC model
 # 							for 2014 where we used weights to take into account the rejected applications and the different number of applications
 #								received over the months.
+#								Possible functions and packages to use for this:
+#								- ddply() in plyr package: note the functions summarize and mutate available to be called as aggregation functions.
+#								Note that this function allows for aggregating several variables on multiple statistics on the same go. However,
+#								the problem is that there seems to be no automatic naming for the aggregated variables (like in aggregate)
+#								(ex from the documentation: ddply(dfx, .(group, sex), summarize, mean = mean(age), sd = sd(age)))
+#								Ref paper: http://www.jstatsoft.org/v40/i01/
+#								- data frame management with data.table package
+#								For examples see this post by Carlos Gil Bellosta:
+#								http://www.datanalytics.com/2014/03/25/totales-agregados-por-bloques-en-tablas/
 InformationValue = function(
   data,             # Dataset containing the variables to analyze listed in 'vars', 'varclass' and/or 'varnum
   target,           # Either an unquoted variable name or a string indicating the name of the binary target variable in 'data' on which the Information Value is computed
@@ -1211,6 +1581,7 @@ iv = function(y, group, x=NULL, event="LAST", stat="mean") {
   }
 
   ### VARS, VARCLASS, VARNUM
+  # NOTE that unlist(strstplit()) also works when the argument is already a vector!!! GREAT!!
   if (!is.null(vars)) { vars = unlist(strsplit(vars,"[ \n]")) }
   if (!is.null(varclass)) { varclass = unlist(strsplit(varclass,"[ \n]")) }
   if (!is.null(varnum)) { varnum = unlist(strsplit(varnum,"[ \n]")) }
@@ -1429,7 +1800,8 @@ ScoreDistribution = function(
     ylab="% Frequency",                                           # Label for the primary vertical axis (showing the frequency distribution of cases)
     ylab2="Average Probability",                                  # Label for the secondary vertical axis (showing the observed and predicted averages of the target)
     legend=c("Observed Probability", "Predicted Probability"),    # Legend text
-    cex=1)                                                        # Adjustment factor for the legend font size
+    cex=1,																												# Adjustment factor for the legend font size
+    cex.main=1)                                                   # Adjustment factor for the title of the plot
 {
   #------------------- Parse input parameters --------------------
   ### YLIM
@@ -1541,7 +1913,7 @@ ScoreDistribution = function(
     plot(h, freq=FALSE, lty=0, xaxt="n", yaxt="n", main="", xlab="", ylab="")   # Generates first plot in the percent scale (but does NOT show the histogram)
     yaxp = par("yaxp"); usr = par("usr");                                       # Reads current vertical axis properties used below
     par(new=TRUE);                                                              # Plots the ACTUAL HISTOGRAM showing the counts as labels on top of the bars
-    plot(h, labels=TRUE, freq=TRUE, xlim=xlim, ylim=ylim, col=rgb(r,g,b,0.50), main=title, xlab=xlab, ylab=ylab, yaxt="n")
+    plot(h, labels=TRUE, freq=TRUE, xlim=xlim, ylim=ylim, col=rgb(r,g,b,0.50), main=title, xlab=xlab, ylab=ylab, yaxt="n", cex.main=cex.main)
     yticks = seq(yaxp[1], yaxp[2], length.out=yaxp[3]+1)                        # Construct the tick positions from the yaxp property
     binsize = diff(h$breaks)[1];                                                # Bin size (used to compute the actual percent values to show as labels)
     labels = binsize*yticks;                                                    # Computes the labels to show (which depends on the bin size in order to show actual percentages!!)
@@ -1652,6 +2024,52 @@ ScoreDistribution = function(
   }
 }
 ####################################### ScoreDistribution #####################################
+
+
+
+########################################## ModelFit ###########################################
+ModelFit <- model.fit <- function(dat, target="y", score="p", vars="p", groups=20, legend=TRUE, ...)
+# Created: 			30-Mar-2014
+# Author:				Daniel Mastropietro
+# Description:	Evaluate using plot.binned() the model fit by selected input variables.
+#								The target variable can be binary or continuous.
+# Details:			A two-panel plot is created for each analyzed variable using plot.binned().
+#								The first panel contains both the input and target variables in their original scale (before binning)
+#								The second panel contains the input and target variables restricted to the new scale (after binning)
+#	Parameters:		- dat: matrix or data frame with the modeling data
+#								- target: name of variable in dat or vector with model target variable
+#              	- score: name of variable in dat or vector with model score
+#              	- vars: string or vector of variable names to be analyzed
+#								- groups: number of groups to use for the binned plots
+#								- ...: additional parameters to pass to plot.binned()
+# Output: 			None
+#
+{
+	op = par(mfrow=c(1,2), mar=c(2,2,2,0), no.readonly=TRUE); on.exit(par(op))
+	
+	#---------------------------- Parse input parameters -------------------------------
+	# This parsing should allow for both target and score variables that are names or actual numeric variables
+	target = parseVariable(dat, target)
+	score = parseVariable(dat, score)
+	#---------------------------- Parse input parameters -------------------------------
+
+	# If vars is passed as a string convert it to an array of variable names
+	if (is.character(vars) & length(vars) == 1) {
+		vars = unlist(strsplit(vars, "[ \n]"))
+	}
+	i = 0
+	for (v in vars) {
+		i = i + 1
+		cat("Analyzing variable", i, "of", length(vars), ":", v, "...\n")
+		plot.binned(dat[,v], target, pred=score, groups=groups, title=v, ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=FALSE, ...)
+		if (legend) legend("top", legend=c("observed mean", "predicted mean", "lm fit", "loess fit"), pch=c(21,NA,NA,NA), lty=c(NA,1,2,1), lwd=c(NA,2,2,2), col=c("black", "red", "blue", "green"), pt.bg=c("light blue",NA,NA,NA), pt.cex=c(1.2,NA,NA,NA), cex=0.6)
+		plot.binned(dat[,v], target, pred=score, groups=groups, title=v, xlim="new", ylim="new", ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=FALSE, ...)
+	}
+	
+	# Restore graphical settings
+	par(op)
+}
+########################################## ModelFit ###########################################
 
 
 

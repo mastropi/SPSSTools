@@ -1,6 +1,6 @@
 # startup-functions.r
 # Created:      July 2008
-# Modified:     15-Sep-2013
+# Modified:     28-Mar-2013
 # Author:       Daniel Mastropietro
 # Description: 	Startup settings to be invoked when R starts
 # R version:    R-2.8.0 (used in SPSS 18.0.0 @NAT starting 2013)
@@ -89,20 +89,20 @@ getAxisLimits = function(ext=0.04)
 	return(c(xlim, ylim))
 }
 
-CheckVariables <- checkVariables <- function(data, vars, print=FALSE)
-# Created: 			2013/08/05
-# Modified: 		2013/08/05
+CheckVariables <- checkVariables <- check.variables <- function(data, vars, print=FALSE)
+# Created: 			05-Aug-2013
+# Modified: 		30-Mar-2014
 # Author: 			Daniel Mastropietro
 # Description: 	Checks whether a set of variables exist in a data frame
 # Parameters:
-#             	data: data frame where the existence of the variables is checked
+#             	data: matrix or data frame where the existence of the variables (columns) is checked
 #             	vars: vector of variable names given as strings
 # Output: 			A vector with the names of the variables not found in the dataset is returned.
 # Examples:			varsNotFound = checkVariables(df, c("x1","z","tt"), print=TRUE)
 {
-  if (!is.data.frame(data)) {
-    stop("CHECKVARIABLES - ERROR: The dataset '", deparse(substitute(data)), "' is not a data frame")
-  }
+#  if (!is.data.frame(data)) {
+#    stop("CHECKVARIABLES - ERROR: The dataset '", deparse(substitute(data)), "' is not a data frame")
+#  }
   
   # Start
   varsNotFound = NULL
@@ -127,6 +127,26 @@ CheckVariables <- checkVariables <- function(data, vars, print=FALSE)
     if (print | length(grep("GlobalEnv", environmentName(sys.frame(sys.parent())))) > 0) # HOWEVER, grepl() does NOT exist in R-2.8.0!! (used in SPSS 18.0.1) So in SPSS I use length(grep()) > 0 as an equivalent condition to grepl() == TRUE.
       cat("All variables found in dataset '", deparse(substitute(data)), "'\n")
   }
+}
+
+parseVariable <- parse.variable <- function(dat, var)
+# Created: 			30-Mar-2014
+# Modified: 		30-Mar-2014
+# Author: 			Daniel Mastropietro
+# Description: 	Parses variables passed to functions so that variable names are converted to the actual variable in the data frame.
+# Parameters:
+#             	data: matrix or data frame that should contain variable 'var'
+#             	var: single variable received by the function for which this parsing is taking place
+# Output: 			Either an error that the variable does not exist or the actual variable taken from data frame 'dat'
+# Examples:			target = "y"; target = parseVariable(toplot, target);
+#								target = dat$y; target = parseVariable(toplot, target);
+{
+	if (is.character(var) & length(var) == 1) {
+		if (!is.null(checkVariables(dat, var))) stop("The variables indicated above were not found in dataset '", deparse(substitute(dat)), "'")
+		var = dat[,var] 
+	}
+
+	return(var)
 }
 
 who = function(envir=.GlobalEnv)
@@ -272,9 +292,6 @@ logitInv = function(x, adjust=0)
 # INDEX (sorted alphabetically)
 # hist.log
 # biplot.custom
-# panel.cor
-# panel.dist
-# panel.hist
 # pairs.custom
 # pairsXAxisPosition
 # pairsYAxisPosition
@@ -282,10 +299,15 @@ logitInv = function(x, adjust=0)
 # plot.bar		(NEW Mar-2014)
 # plot.binned
 # plot.cdf		(NEW Mar-2014)
-# plot.dist (in construction, which calls panel.dist --when finalized should I remove the 'add' parameter form panel.dist() --because this is a panel function--, or should I leave it anyway (with default value always add=TRUE)? perhaps leave it...)
+# plot.dist (in construction, which calls panel.dist --when finalized should I remove the 'add' parameter form panel.dist() --because this is a panel function)
 # plot.hist
 # plot.image
 # plot.log
+
+# PANEL FUNCTIONS (functions that only make sense when ADDED to a panel --such as the panels on a pairs plot)
+# panel.cor
+# panel.dist
+# panel.hist
 # 
 
 # 2013/09/21
@@ -303,7 +325,7 @@ plot.dist = function(dat, plot.fun=plot, respect=FALSE, histogram=FALSE, xlim=NU
   paramsList[[1]] = NULL
   # Remove also the data frame because this name is not recognized by plot() or similar functions, whose first argument is named 'x'
   paramsList$dat = NULL
-    
+
   ### Define the graphical layout, as follows:
   # Plot #1: will be done on the bottom-left tile (scatter plot)
   # Plot #2: will be done on the top-left tile (distribution of variable 1)
@@ -465,7 +487,7 @@ panel.dist = function(x, add=TRUE, histogram=FALSE, horizontal=TRUE, xlim=NULL, 
   }
   
   # Start plotting
-  usr <- par("usr")
+  usr <- par("usr"); on.exit(par(usr))
   if (histogram) {
     ### Plot the histogram using barplot()
     ### Note that I need to use barplot() and NOT plot(hist, ...) because I want to plot the histogram
@@ -504,20 +526,27 @@ panel.dist = function(x, add=TRUE, histogram=FALSE, horizontal=TRUE, xlim=NULL, 
 
 # Histogram as a diagonal panel function in pairs()
 panel.hist <- function(x, ...)
-  # Created: 2008/06/20
-  # Modified: 2008/06/20
-  # Function to use as a panel function in pairs() that plots the histogram of the variables.
-  # Typically used as the diag.panel function in pairs().
-  # (taken from help(pairs))
-  # Note the inclusion of the '...' parameter in order to avoid any errors when additional parameters
-  # are passed to other functions used in the pairs() call to be used for the different panels
-  # (e.g. plot.binned() below which accepts many parameters) 
+# Created: 2008/06/20
+# Modified: 2008/06/20
+# Function to use as a panel function in pairs() that plots the histogram of the variables.
+# Typically used as the diag.panel function in pairs().
+# (taken from help(pairs))
+# Note the inclusion of the '...' parameter in order to avoid any errors when additional parameters
+# are passed to other functions used in the pairs() call to be used for the different panels
+# (e.g. plot.binned() below which accepts many parameters) 
 {
+	# Change the user coordinates for the panel so that the vertical axis varies from 0 to 1.5.
+	# This allows a percent histogram to fit in the panel and leaves space above the histogram
+	# to show the variable name (added by the text.panel= function specified in the pairs() plot)
+	# What I don't understand is how the variable name appears on top of the histogram and not OVER the histogram...
+	# (I haven't found anything in the default text.panel= function that suggests what happens with the variable name)
   usr <- par("usr"); on.exit(par(usr=usr))
-  par(usr = c(usr[1:2], 0, 1.5) )
+  par(usr=c(usr[1:2], 0, 1.5) )
   h <- hist(x, plot = FALSE)
   breaks <- h$breaks; nB <- length(breaks)
   y <- h$counts; y <- y/max(y)
+  # Use the rect() function (rect(xleft, ybottom, xright, ytop)) to ADD the histogram to the already generated plot for the panel
+  # Recall that panel plots should only ADD plots, not create a new plot (which gives an error).
   rect(breaks[-nB], 0, breaks[-1], y, col="light cyan")
 }
 
@@ -556,26 +585,28 @@ plot.image = function(x, y, col="red", nlevels=12, xaxt="s", yaxt="s", addXAxis=
 
   # Remove any missing values
   indok = !is.na(x) & !is.na(y)
-  xy <- kde2d(x[indok],y[indok])
-  if (all(is.na(xy$z))) {
-  	# If the above density estimation fails (i.e. all z values are NA because of flawed data --e.g. too many repeated values)
-  	# create a new density estimation based on jittered x and y values (i.e. with added noise)
-  	# Otherwise calling image() on all NA data gives an error. Note that it suffices for ONE value to be non-NA for the image() function to work.
-  	xy <- kde2d(jitter(x[indok]),jitter(y[indok]))
-  }
+  xy <- try( kde2d(x[indok],y[indok]) )
+  if (!inherits(xy, "try-error")) {
+    if (all(is.na(xy$z))) {
+    	# If the above density estimation fails (i.e. all z values are NA because of flawed data --e.g. too many repeated values)
+    	# create a new density estimation based on jittered x and y values (i.e. with added noise)
+    	# Otherwise calling image() on all NA data gives an error. Note that it suffices for ONE value to be non-NA for the image() function to work.
+    	xy <- kde2d(jitter(x[indok]),jitter(y[indok]))
+    }
   
-  # Show the image plus contour lines
-  image(xy, add=add, col=whitered.palette(nlevels), ...)
-  contour(xy, add=TRUE)
+    # Show the image plus contour lines
+    image(xy, add=add, col=whitered.palette(nlevels), ...)
+    contour(xy, add=TRUE)
   
-  # Add axis ticks if requested
-  if (addXAxis) {
-    axisProperty = pairsXAxisPosition(xaxt=xaxt)
-    axis(at=pretty(x[indok]), side=axisProperty$side, outer=axisProperty$outer, line=axisProperty$line)
-  }
-  if (addYAxis) {
-    axisProperty = pairsYAxisPosition(yaxt=yaxt)
-    axis(at=pretty(y[indok]), side=axisProperty$side, outer=axisProperty$outer, line=axisProperty$line)
+    # Add axis ticks if requested
+    if (addXAxis) {
+      axisProperty = pairsXAxisPosition(xaxt=xaxt)
+      axis(at=pretty(x[indok]), side=axisProperty$side, outer=axisProperty$outer, line=axisProperty$line)
+    }
+    if (addYAxis) {
+      axisProperty = pairsYAxisPosition(yaxt=yaxt)
+      axis(at=pretty(y[indok]), side=axisProperty$side, outer=axisProperty$outer, line=axisProperty$line)
+    }
   }
 }
 
@@ -603,13 +634,13 @@ plot.binned = function(
 	center=mean, scale=sd, groups=20, breaks=NULL, rank=TRUE,
   lm=TRUE, loess=TRUE,
   circles=NULL, thermometers=NULL,  # 'circles' and 'thermometers' must be EXPRESSIONS that parameterize the corresponding symbol based on the computed grouped values (e.g. circles=expression(x_n) or thermometers=expression(cbind(x_n,y_n,target_center)), since these values would not exist during the function call)
-  col="blue", col.pred="black", col.target="red", col.lm="blue", col.loess="green",
+  col="light blue", col.pred="black", col.target="red", col.lm="blue", col.loess="green",
 	pointlabels=TRUE, bands=FALSE, width=2, stdCenter=TRUE, # stdCenter: whether to show the bands using the standard deviation of the *summarized* y value (calculated as scale/sqrt(n), where n is the number of cases in the x category)
   boxplots=FALSE, add=FALSE, offset=1, inches=0.5, size.min=0.05, cex.label=1,
 	xlab=NULL, ylab=NULL, xlim=NULL, ylim=NULL, ylim2=NULL,  # ylim for the secondary axis used to plot the target values
-	xlimProperty="orig",  # xlimProperty can be either "new" or "orig"; in the latter  case the range of the ORIGINAL x values are used as limits for the x-axis => within a pairs() call the same x-axis scale is expected to be shown for ALL pairs plot (unless there are different missing values depending on the analyzed variables)
-	ylimProperty="orig",  # ylimProperty can be either "new" or "orig"; in the latter case the range of the ORIGINAL y values are used as limits for the y-axis => within a pairs() call the same y-axis scale is expected to be shown for ALL pairs plot (unless there are different missing values depending on the analyzed variables)
-  ylim2Property="orig", # ylim2Property can be either "new" or "orig"; in the latter case the range of the ORIGINAL target values are used as limits for the secondary y-axis => within a pairs() call the same secondary y-axis scale is expected to be used for ALL pairs plot (unless there are different missing values depending on the analyzed variables)
+		# xlim, ylim, ylim2 can be either a regular c(minvalue, maxvalue) or a character value: "new" or "orig"
+		# in order to specify whether the new scale coordinates (after binning) or the ORIGINAL values should be used as axis limits
+		# within a pairs() call the same axis scales are expected to be shown for ALL panels, unless missing values vary across variables.
   type2="b", pch2=21,	  # type and pch par() options defining the form and symbol of the target variable
   xaxt="s", yaxt="s",
 	addXAxis=(xlimProperty!="orig"), addYAxis=(ylimProperty!="orig"), # addXAxis, addYAxis: Whether to manually add the x/y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
@@ -655,8 +686,11 @@ plot.binned = function(
 #						(2013/12/31) Added the min and max values of x and y for each x category as part of the data returned by the function as output$data.
 #												 NOTE: THIS STILL NEEDS FIXING BECAUSE IT DOES NOT WORK WHEN 'pred' OR 'target' ARE PASSED. For now it is commented out.
 #						(2014/01/04) Added parameters col.pred and col.target to define the colors of the 'pred' and 'target' lines in the plot.
-#						(2014/03/04) Changed the color parameter for the pointlabels and error bars from "blue" to the one specified in 'col'.
+#						(2014/03/04) Changed the color parameter for the pointlabels and error bars from "blue" to "black", so that they are in neutral color which does not depend on the color used for the points.
 #						(2014/03/11) Added parameters 'type2' and 'pch2' defining the form and symbols for the plot of the target variable.
+#						(2014/03/31) Fixed errors occurring with target variable, when: target variable has missing values (NA) and error message showing up when target=NULL was explictly passed (this was solved by replaing condition "!missing(target)" with "!is.null(target)")
+#												 Simplified the specification of the axis formats by removing parameters xlimProperty, ylimProperty, ylim2Property. Now the "new" or "orig" specifications should be directly passed to xlim, ylim, ylim2.
+#												 Updated ylim range when pred variable is passed and ylim="new".
 {
   #----------------------------------- Parse input parameters ---------------------------------#
   ### Check whether this function is called by pairs, in order to set parameter add=TRUE, so a new plot is NOT created (which gives an error in pairs())
@@ -719,14 +753,13 @@ plot.binned = function(
   if (!is.null(target))	{ target = as.matrix(as.numeric(as.character(target))) }
 
   # Consider only valid observations, i.e. the observations not having missing values in any of x, y and pred
-	if (!is.null(pred)) {
-    indok = !is.na(x) & !is.na(y) & !is.na(pred)
-  } else {
-    indok = !is.na(x) & !is.na(y)
-  }
+  indok = complete.cases(cbind(x, y, pred, target))
+  	## Note that the above doesn't cause any trouble when either pred or target are NULL because
+  	## cbind(x, y, NULL, NULL) is ok and is the same as cbind(x, y)
   x = x[indok]
   y = y[indok]
 	if (!is.null(pred)) pred = pred[indok]
+	if (!is.null(target)) target = target[indok]
 
 	# Sort x for plotting reasons
 	xorder = order(x)
@@ -791,38 +824,49 @@ plot.binned = function(
 	attach(toplot)
 	on.exit(detach(toplot), add=TRUE)		# The add=TRUE option adds the current command to the list of commands to execute "on exit" that has been started already.
 	# Linear fit (weighted by the number of cases in each group)
-  if (lm)     { lmfit = lm(y_center ~ x_center, weights=x_n) }
+  if (lm)     { lmfit = try( lm(y_center ~ x_center, weights=x_n) ) }
 	# Loess fit (local regression, weighted by the number of cases in each group)
-	if (loess)  { loessfit = loess(y_center ~ x_center, weights=x_n) }
+	if (loess)  { loessfit = try( loess(y_center ~ x_center, weights=x_n) ) }
 
   # X-axis limits (use the original range?)
-  if (missing(xlim) & tolower(xlimProperty)=="orig") {
-    # Use the range of the ORIGINAL x values (before computing the summary statistic value for each x_cat) when xlimProperty="orig"
+  if (is.null(xlim) || tolower(xlim) == "orig") {
+    # Use the range of the ORIGINAL x values (before computing the summary statistic value for each x_cat)
+    # either when xlim is NULL or when its value is "orig"
     xlim = range(x)
-  } else if (missing(xlim)) {
-    # Initialize xlim either when it was not specified or when xlimProperty is not equal to "orig"
+	} else if (is.character(xlim)) {
+    # Initialize xlim to the limits AFTER the x categorization is performed when it has a character value other than "orig"
     xlim = range(x_center)
   }
+  ## In all other cases (i.e. when xlim takes the usual c(xmin, xmax) form) use those values as xlim.
 
   # Y-axis limits (use the original range?)
-  if (missing(ylim) & tolower(ylimProperty)=="orig") {
-    # Use the range of the ORIGINAL y values (before computing the summary statistic value for each x_cat) when ylimProperty="orig"
-    ylim = range(y)
-  } else if (missing(ylim)) {
-    # Initialize ylim either when it was not specified or when ylimProperty is not equal to "orig"
-    ylim = range(y_center)
+  if (is.null(ylim) || tolower(ylim) == "orig") {
+    # Use the range of the ORIGINAL y values (before computing the summary statistic value for each x_cat)
+    # either when ylim is NULL or when its value is "orig"
+    # and update it with the range of the pred variable (if any)
+    ylim = range(c(y, pred))					# Note that this also works when pred=NULL
+	} else if (is.character(ylim)) {
+    # Initialize ylim to the limits AFTER the x categorization is performed when it has a character value other than "orig"
+    if (!is.null(pred)) {							# Need to check first if pred is not NULL because pred_center is not part of dataset 'toplot' when pred=NULL
+    	ylim = range(c(y_center, pred_center))
+    } else {
+    	ylim = range(y_center)
+    }
   }
+  ## In all other cases (i.e. when ylim takes the usual c(xmin, xmax) form) use those values as ylim.
   
   # Secondary Y-axis limits (use the original range of target?)
-  if (!missing(target)) {
-    if (missing(ylim2) & tolower(ylim2Property)=="orig") {
-      # Use the range of the ORIGINAL target values (before computing the summary statistic value for each x_cat) when ylim2Property="orig"
+  if (!is.null(target)) {
+	  if (is.null(ylim2) || tolower(ylim2) == "orig") {
+      # Use the range of the ORIGINAL target values (before computing the summary statistic value for each x_cat)
+      # either when ylim2 is NULL or when its value is "orig"
       ylim2 = range(target)
-    } else if (missing(ylim2)) {
-      # Initialize ylim either when it was not specified or when ylimProperty is not equal to "orig"
+		} else if (is.character(ylim2)) {
+	    # Initialize ylim2 to the limits AFTER the x categorization is performed when it has a character value other than "orig"
       ylim2 = range(target_center)
     }
   }
+  ## In all other cases (i.e. when ylim2 takes the usual c(xmin, xmax) form) use those values as ylim2.
 
   # Update ylim if bands for the y values are requested for each x_cat
 	if (bands)
@@ -923,8 +967,8 @@ plot.binned = function(
         axis(at=pretty(c(ylim,y_center)), side=axisProperty$side, outer=axisProperty$outer, line=axisProperty$line)
       }
     }
-    if (lm) { lines(x_center, lmfit$fitted, col=col.lm,  lwd=2, lty=2) }
-    if (loess) { lines(x_center, loessfit$fitted, col=col.loess, lwd=2) }
+    if (lm & !inherits(lm, "try-error")) { lines(x_center, lmfit$fitted, col=col.lm,  lwd=2, lty=2) }
+    if (loess & !inherits(loessfit, "try-error")) { lines(x_center, loessfit$fitted, col=col.loess, lwd=2) }
     
     # If non-null, plot the fitted values (given in pred).
     if (!is.null(pred))
@@ -1008,7 +1052,7 @@ plot.binned = function(
 
 # Pairs plot of a set of variables where customized information is shown on the lower, diagonal and upper panels
 # CHECK ALSO the car package (companion to applied regression) for interesting functions to enhance plots commonly used for regression)
-pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.panel=points, addXAxis=FALSE, addYAxis=FALSE, max.panels=6, pause=TRUE, ...)
+pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.panel=points, addXAxis=FALSE, addYAxis=FALSE, max.panels=6, pause=TRUE, target=NULL, ...)
 # Created:      2013/07/08
 # Modified:     2013/07/08
 # Description:  A manual pairs plot is produced. The plot is manual in that no call to the pairs() function is done but rather
@@ -1025,6 +1069,7 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 #               addXAxis:	  Whether to manually add the x-axis ticks (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
 #               addYAxis: 	Whether to manually add the y-axis ticks (this was invented because the value of par("yaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
 #								max.panels: Max number of panels to show per pairs plot. Several pairs plot are constructed when the number of variables in x is larger than max.panels.
+#								target:			Name of the variable in x containing a target variable of interest. In this case the target variable is shown at the first row of the panel on EVERY pairs plot generated (when max.panels < number of columns in x)
 #
 # HISTORY:  (2013/09/03) Took care of missing values in the data (i.e. removed cases that have missing values in ANY of the analyzed variables x, y and pred.
 #           (2013/09/15) Placed the two functions used by default for the lower and diagonal panels outside of this function so that they can be called by any pairs() call.
@@ -1034,6 +1079,8 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 #												 NOTE: If there is a target variable, it should be placed FIRST in the x matrix, so that it is plotted in ALL pairs plot at the first row.
 #												 Also, for some reason the target variable CANNOT be passed as e.g. dat[,"target"] but it should be passed as dat$target.
 #												 In the former case, I got the error "only 0's can be mixed with negative subscripts"... Not yet clear why I get this error.
+#						(2014/03/30) Added parameter 'target' which contains the name of a target variable of interest.
+#												 This implied the redesign of a large part of the function.
 #
 {
   # Store the list of explicitly defined parameters in this function
@@ -1056,59 +1103,98 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 #    paramsListToRemove = paramsListToRemove - 1
 #  }
   
+  #-------------------------- Parse Input parameters ---------------------------
   # Put all calling parameters into a parameter list for the pairs() function call with do.call()
   paramsList = as.list(call)
   # Remove the function name from the parameter list
   paramsList[[1]] = NULL
 
-  # Set parameters not passed by the user to the custom value I want to use here.
+  ### Set parameters not passed by the user to the custom value I want to use here.
   # Note that I need to check if they were not passed by the user before assigning the custom value
   # because I don't want to override the user's specification!
   # Note also that NOT all parameters defined by the function are included in the parameter list
   # returned by match.call() because match.call() only includes parameters explicitly passed by the user!
   if (is.null(paramsList$lower.panel)) paramsList$lower.panel = plot.image
   if (is.null(paramsList$diag.panel))  paramsList$diag.panel  = panel.dist
-  ## Note that the third parameter upper.panel is NOT defined because there is no custom value assigned to it.
+  ## Note that I do not assign a value to paramsList$upper.panel because there is no default custom value assigned to it.
   if (is.null(paramsList$gap)) paramsList$gap = 0       # pairs() parameter specifying the distance between panel plots in margin lines
   if (is.null(paramsList$new)) paramsList$new = FALSE
   if (is.null(paramsList$oma)) paramsList$oma = c(2,3,2,3)
 
+	### Settings for the pairs plot
 	# Limit the number of panels on each plot to the value specified in 'max.panels'
   imax = ncol(x)
   nplots = ceiling(imax/max.panels)
-	if (nplots > 1) {
-		# Define the first column with input variables to plot in the pairs plot (i.e without considering any target variable passed by the user)
-		if (!is.null(paramsList$target)) {
-			# It is assumed that the target variable is at the first column of x
-			target = x[,1]
-			# Reduce the value of max.panels because there is one more row for the target variable already in every pairs plot
+  # Adjust 'cex' and 'inches' when plot.binned() is used as panel function in the lower or upper diagonal,
+  # and when they are not passed by the user, so that they become smaller as the number of panels per pairs plot grows.
+  # The adjustment based on max.panels was obtained by trial and error.
+  if (deparse(substitute(lower.panel)) == "plot.binned" | deparse(substitute(upper.panel)) == "plot.binned") {
+		## Note that the deparse(substitute()) function needs to be applied to the function parameters 'lower.panel' and 'upper.panel'
+		## and NOT to the elements of parmasList (paramsList$lower.panel and paramsList$upper.panel) because in the latter case
+		## the result is a complicated structure representing something like the function call and having the function name
+		## (e.g. "plot.binned") appearing at the end (as e.g. $plot.binned)
+		## The output of this can be seen by printing the output as a list as follows:
+		## print(as.list(deparse(substitute(paramsList$upper.panel))))
+		if (is.null(paramsList$cex)) paramsList$cex = 1/(max.panels^(1/3))
+	 	if (is.null(paramsList$inches)) paramsList$inches = 0.5/(max.panels^(1/3))
+  }
+
+	### Target variable
+	# If a target parameter is passed, place it as first column of x so that it is plotted at the first row of the pairs plot 
+	# in EVERY generated pairs plot.
+	if (!missing(target)) {
+		# Check the existence of the variable indicated in 'target' in matrix or data frame 'x'.
+		# (recall that 'target' contains the NAME of the target variable)
+		if (!is.null(checkVariables(x, target))) {
+			stop("The variables indicated above were not found in dataset '", deparse(substitute(x)), "'")
+		} 
+		# Place the target variable at the first column of matrix or data frame x so that it is more easily handled below when generating the pairs plots
+		x = cbind(x[,target,drop=FALSE], x[,-match(target, colnames(x)),drop=FALSE])
+		# Update the 'x' component of paramsList so that the correct order of variables is passed to pairs()
+		paramsList$x = x
+
+		# Generate the target variable as a matrix (with as.matrix()) and preserve the original variable name (with drop=FALSE)
+		# Note that if x is a data frame, there will be an error in plot.binned() (if called) because in that function the target variable
+		# is transformed with as.matrix(as.numeric(as.character(target))) which gives an error when 'target' is a data frame.
+		target = as.matrix(x[,1,drop=FALSE])
+		# Update the 'target' component of paramsList so that it is now an array (or matrix) of values (as opposed to a variable name)
+		# since this is how it is received by panel functions (such as plot.binned())
+		paramsList$target = target
+
+		# Settings for the generation of the pairs plot below when number of pairs plot to generate is more than 1
+		if (nplots > 1) {
+			# Reduce the value of max.panels because this will be used as the number of INDEPENDENT variables being plotted in each pairs plot
 			max.panels = max.panels - 1
-			# First independent variable to plot
-			i = 2
-		} else {
-			target = NULL
-			# First independent variable to plot
-			i = 1
-		}
-		if (!is.null(target)) {
+			# First INDEPENDENT variable to plot in every pairs plot
+			imin = 2
 			# The number of panels per pairs plot is max.panels + 1
 			cat("For better view, the pairs plot is divided into", nplots, "plots of", max.panels+1, "panels each.\n")
-		} else {
+		}
+	} else {
+		# Remove 'target' from paramsList so that it is not passed to the calling functions which may not receive 'target' as a parameter
+		paramsList$target = NULL
+		# Settings for the generation of the pairs plot below when number of pairs plot to generate is more than 1
+		if (nplots > 1) {
+			# First INDEPENDENT variable to plot in every pairs plot
+			imin = 1
 			# The number of panels per pairs plot is max.panels
 			cat("For better view, the pairs plot is divided into", nplots, "plots of", max.panels, "panels each.\n")
 		}
+	}
+  #-------------------------- Parse Input parameters ---------------------------
+
+	if (nplots > 1) {
 		plotnum = 0
-		for (i in seq(i,imax,max.panels)) {
+		for (i in seq(imin, imax, max.panels)) {
 			plotnum = plotnum + 1
 			cat("Plot", plotnum, "of", nplots, "...\n")
-			if (!is.null(paramsList$target)) {
+			if (!is.null(target)) {
 				paramsList$x = x[,c(1,i:min(i+max.panels-1, imax))]
 			} else {
 				paramsList$x = x[,i:min(i+max.panels-1, imax)]
 			}			
 		  # Call the pairs() function
 		  do.call("pairs", paramsList)
-		  i = i + max.panels
 		  if (pause & i <= imax) {
 		  	cat("Press ENTER for next plot:")
 		  	readline()
@@ -1118,7 +1204,6 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 		# Call the pairs() function
 		do.call("pairs", paramsList)	
 	}
-
 }
 
 # Histogram in log scale
@@ -1269,6 +1354,7 @@ plot.hist = function(x, y, ...)
 #				x			  Breaks of histogram
 #				y			  Counts or density of histogram
 #				...		  Additional parameters to pass to the plot() function.
+# NOTE: (2014/03/28) This same plot could be much more easily done with the rect() function (see panel.dist() in this module)
 {
 	toplot = cbind(x[-1], y)
 	tp = matrix(nrow=3*nrow(toplot)+1, ncol=2)
@@ -1337,7 +1423,9 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
     ### Points
     if (pointsFlag) {
       axis(1); axis(2);
-      if (is.null(pointlabels)) {
+      if (is.null(pointlabels) | outliersFlag) {
+      	# Show just points either when the pointlabels vector is NULL or the user wishes to see outliers highlighted
+      	# (it which case it is only relevant to know the ID of the outliers, not of ALL the cases!)
         points(X, pch=21, col=rgb(0,0,0,0.2), bg=rgb(0,0,0,0.2), cex=0.3)
       } else {
         text(X, label=pointlabels, adj=0, offset=0, col=rgb(0,0,0,0.8), bg=rgb(0,0,0,0.8), cex=0.5)
@@ -1359,10 +1447,11 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
         hat.quant = 0
       }
       assign("indOutliers", pos=sys.nframe()-2, which((hat>thr*p/n) & (hat> hat.quant)))  # NOTE: It seems it's important to use parenthesis to enclose each > condition!
+      assign("hat", pos=sys.nframe()-2, hat)	# Diagonal of hat matrix to show leverage of outliers
       if (is.null(pointlabels)) {
         label = 1:length(indOutliers)
       } else {
-        label = pointlabels[indOutliers,]
+        label = pointlabels[indOutliers]
       }
       # Clip the points and its labels to the figure region
       op = par()
@@ -1434,14 +1523,26 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
   
   if (outliersFlag) {
     # indOutliers is created in function plot.ArrowsAndPoints()
-    outliers= data.frame(V1=x$scores[indOutliers,pc[1]], V2=x$scores[indOutliers,pc[2]])
-    names(outliers) = c(paste("Comp.", pc[1], sep=""), paste("Comp.", pc[1], sep=""))
+    outliers = data.frame(V1=x$scores[indOutliers,pc[1]], V2=x$scores[indOutliers,pc[2]], V3=hat[indOutliers])
+    names(outliers) = c(paste("Comp.", pc[1], sep=""), paste("Comp.", pc[1], sep=""), "leverage")
     if (!is.null(pointlabels)) {
-      rownames = pointlabels[indOutliers,]
+      rownames = pointlabels[indOutliers]
     } else {
       rownames = indOutliers
     }
     rownames(outliers) = rownames
+    # Show the distribution of leverage values
+    cat("Distribution of leverage values\n")
+    ord = order(hat,decreasing=TRUE)
+    if (!is.null(pointlabels)) {
+    	ind = pointlabels
+    } else {
+    	ind = 1:length(hat)
+    }
+    plot(hat[ord], main="Leverage values", xlab=deparse(substitute(pointlabels)), type="p", pch=21, col="black", bg="black", xaxt="n")
+    lines(hat[ord], col="black")
+    mtext(ind[ord], side=1, at=1:length(hat), las=3, cex=0.5)
+    print(summary(hat))
     return(outliers)
   }
 }
@@ -1493,17 +1594,28 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 	return(as.matrix(x.cdf))
 }
 
-plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE, horiz=FALSE, bars=TRUE, width=1, cex=0.8, las=1, col.bars="black", plot=TRUE, ...)
+plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE, horiz=FALSE, bars=TRUE, width=1, cex.names=0.6, las=3, col.bars="black", plot=TRUE, ...)
 # Created:      26-Mar-2014
 # Modified:   	26-Mar-2014
 # Description: 	Make a Bar Plot of a categorical variable x showing the average of a target variable y,
 #								where the width of the bars are proportional to the size of each x category.
-# Parameters:   - x: Either a character or numeric array corresponding to a categorical variable, or a matrix containing  the
-#									data (already aggregated) to plot. In the latter case, the columns of x should contain columns named as:
-#									- the value of parameter 'event'
-#									- "n" (with the number of cases per category)
-# 								- "sd" (with the standard deviation of the target variable to plot per category --note that this value
-#										should NOT be already divided by sqrt(n))
+# Parameters:   - x: Either a character or numeric array corresponding to a categorical variable, or a matrix/data frame containing the
+#									data (already aggregated) to plot.
+#									In the latter case, x is assumed to be the output of a previously run plot.bar(), which depends on parameter FUN:
+#									- When FUN == "table", x is expected to have been generated for a CATEGORICAL y variable, therefore it should have
+#										the following columns:
+#										- column 'event': the target variable event rate per category to show on the plot
+#										- column "n": the number of cases per category
+# 									- column "sd": the standard deviation of the target variable per category (NOTE that this value
+#																	 should NOT be already divided by sqrt(n))
+#										In addition the ROW NAMES of x should contain the x categories to show on the plot!
+#									- When FUN != "table", x is expected to have been generated for a CONTINUOUS y variable, therefore it should have
+#										the following columns:
+#										- column 1: the x categories to show on the horizontal axis
+#										- column 2: the representative value (e.g. mean) of the target variable per category to show on the plot
+#										- column "n": the number of cases per category
+# 									- column "sd": the standard deviation of the target variable per category (NOTE that this value
+#																	 should NOT be already divided by sqrt(n))
 #								- y: A character or numeric variable that represents some target variable of interest.
 #								- event: Value taken by the y variable representing an event of interest (e.g. "1" for a binary 0/1 variable)
 #								- FUN: Function to use to apply to the (x, y) pair. It can be either "table" or any other function that is
@@ -1511,26 +1623,41 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 #									must be numeric.
 #									When FUN=="table", table(x,y) is computed and the proportion of occurrence of 'event' in the y variable is plotted as a bar plot.
 #									In all other cases, aggregate(y ~ x, FUN=FUN, na.rm=TRUE) is computed and the resulting value of the y variable is plotted as a bar plot.
-#								- decreasing: how the x categories should be sorted in the bar plot. Either TRUE, FALSE or NA (alphabetical order).
+#								- decreasing: how the x categories should be sorted in the bar plot based on target variable y.
+#									Either TRUE (by decreasing y), FALSE (by increasing y) or NA (alphabetical order).
 #								- horiz: Whether the bar plot should show horizontal or vertical bars (same parameter used by barplot())
 #								- bars: Whether to show error bars proportional to the SE of y on each bar.
 #								- width: Width of the error bars as multiplier of the SE of y.
-#								- cex: Character expansion value to use in the bar plot (parameter cex.names of barplot())
+#								- cex.names: Character expansion value to use in the bar plot and annotations (parameter cex.names of barplot(), cex of text())
 #								- las: Label orientation for the x category axis (parameter las of barplot())
 #								- col.bars: Color to use for the error bars
 #								- plot: Whether to generate the plot or just return the table with the data to be plotted
 #								- ...: Additional parameters to be passed to graphical functions called (bars(), segments(), points())
 # Output:       A bar plot is generated where the x categories are sorted by decreasing number of cases.
-#								An matrix containing the following columns:
+#								A matrix containing the following columns:
 #								- The x categories
 #								- The number of non-missing cases in each category
-#								- The average value of y and its standard error in each category
+#								- The value resulting from applying FUN to y in each category
+#								- The standard error of:
+#									- the 'event' rate in each category when FUN == "table"
+#									- the representative value of y in each category when FUN != "table"
 # Assumptions:  None
 {
+  # Graphical settings
+  opar = par(no.readonly=TRUE)
+  on.exit(par(opar))
+  par(mar=c(5.5,4,2,1), xpd=TRUE)		# xpd=TRUE => clip all the plotting to the figure region (as opposed to the plot region) so that labels showing the number of cases in each bar are always seen)
+
+  # Initialize tab so that we can easily check whether the users passed a matrix as x or a vector
 	tab = NULL
+	
+	# Get the input variable names to use on messages to the user and as column names of the output table
+	# (I must do this here because below I may change the value of x and/or y)
+	xvarname = deparse(substitute(x))
+	yvarname = deparse(substitute(y))
 
 	# Check if parameter x is already a table containing the raw numbers of what should be plotted
-	if (is.matrix(x)) {
+	if (is.matrix(x) | is.data.frame(x)) {
 		# The input matrix is considered to be already a computed table (i.e. the output of 
 		tab = x
 		if (!("n" %in% colnames(tab)) | (bars & !("sd" %in% colnames(tab)))) {
@@ -1547,10 +1674,12 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 			ycol = 2
 		}
 	}
-	
-	# Start computation in the case x is NOT a matrix
+
+	# Start computation in the case x is NOT a matrix or data frame
 	if (FUN == "table" & is.null(tab)) {
-		tab.counts = table(x, y)
+	  x = as.character(x)       # Remove the factor condition if existing from the categorical variable in order to avoid having categories with 0 cases!
+	  tab.counts = table(x, y)
+    # Compute percentages of events and number of cases in each category
 		tab = cbind(prop.table(tab.counts, margin=1), n=apply(tab.counts, 1, sum))
 		# Standard deviation of y using the probability of occurrence of 'event'
 		# (note that I don't yet divide by n this happens at the moment of plotting below)
@@ -1564,33 +1693,36 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 		if (!is.numeric(y)) {
 			stop("Variable '", deparse(substitute(y)), "' is NOT numeric.\n")
 		} else {
-			tab = aggregate(y ~ x, FUN=FUN, na.rm=TRUE)
-			# Compute the number of non-missing cases in each x category.
+		  x = as.character(x)       # Remove the factor condition if existing from the categorical variable in order to avoid having categories with 0 cases!
+		  tab = aggregate(y ~ x, FUN=FUN, na.rm=TRUE)
+			# Compute the number of non-missing rows in the matrix obtained as cbind(x,y)
 			# Note that the variable y can have missing values but these are not excluded from the count of non-missing values,
 			# only the non-missing values in x are of interest.
-			tab = cbind(tab, n=as.numeric(table(x)))			# Note that NAs are NOT part of the table() output
+			tab = cbind(tab, n=aggregate(y ~ x, FUN=function(x){ sum(!is.na(x)) })[,2])
 			tab = cbind(tab, sd=aggregate(y ~ x, FUN=sd, na.rm=TRUE)[,2])
+      # Replace missing values of sd with 0
+      tab[is.na(tab[,"sd"]),"sd"] = 0
 			# Names to be used as x categories in the bar plot
 			xnames = tab[,1]
 			# Column of 'tab' containing the values of y to plot
 			ycol = 2
-			colnames(tab)[1:2] = c(deparse(substitute(x)), deparse(substitute(y)))
+			colnames(tab)[1:2] = c(xvarname, yvarname)
 		}
 	}
 
-	if (plot) {
+  # Sort x categories as requested through the 'decreasing' parameter
+  if (!is.na(decreasing)) {
+    ord = order(tab[,ycol], decreasing=decreasing)
+  } else {
+    ord = 1:nrow(tab)
+  }
+  tab = tab[ord,,drop=FALSE]  # Note the use of drop=FALSE so that tab is still a matrix even when it has only one row
+  xnames = xnames[ord]
+
+  if (plot) {
 		### Bar plot
 		xlim = NULL
 		ylim = NULL
-		# Sort x categories as requested
-		if (!is.na(decreasing)) {
-			ord = order(tab[,ycol], decreasing=decreasing)
-		} else {
-			ord = 1:nrow(tab)
-		}
-		tab = tab[ord,,drop=FALSE]
-    ## Note the use of drop=FALSE so that tab is still a matrix even when it has only one row
-		xnames = xnames[ord]
 		# Set appropriate limits before calling barplot() when error bars are requested
 		if (bars) {
 			if (horiz) {
@@ -1600,13 +1732,23 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 			}
 		}
 		# Generate the bar plot and store the position of the center of each bar in 'barpos' so that we can add the error bars if requested
-		barpos = barplot(tab[,ycol], names.arg=xnames, horiz=horiz, cex.names=cex, width=tab[,"n"], xlim=xlim, ylim=ylim, las=las, ...)
+    # Note that I check whether the user passed the parameters xlim (when horiz=TRUE) or ylim (when horiz=FALSE)
+    # so that there is no error indicating that the same parameter has been passed twice to the barplot() function.
+    # This is not the best way to do this, but it's the quickest (otherwise I would have to do a whole parsing of the input parameters
+    # involving a call to match.call(), etc. --see function pairs.custom() for an example)
+    if (horiz & !missing(xlim)) {
+      barpos = barplot(tab[,ycol], names.arg=xnames, horiz=horiz, cex.names=cex.names, width=tab[,"n"], ylim=ylim, las=las, ...)
+    } else if (!horiz & !missing(ylim)) {
+      barpos = barplot(tab[,ycol], names.arg=xnames, horiz=horiz, cex.names=cex.names, width=tab[,"n"], xlim=xlim, las=las, ...)
+    } else {
+      barpos = barplot(tab[,ycol], names.arg=xnames, horiz=horiz, cex.names=cex.names, width=tab[,"n"], xlim=xlim, ylim=ylim, las=las, ...)
+    }
 		# Add the number of cases per category above each bar
 		if (horiz) {
 			# Horizontal bars
-			text(tab[,ycol], barpos, labels=tab[,"n"], offset=0.5, pos=2, cex=0.8)
+			text(tab[,ycol], barpos, labels=tab[,"n"], col="blue", offset=0.5, pos=2, cex=cex.names)
 		} else {
-			text(barpos, tab[,ycol], labels=tab[,"n"], offset=0.5, pos=1, cex=0.8)
+			text(barpos, tab[,ycol], labels=tab[,"n"], col="blue", offset=0.5, pos=1, cex=cex.names)
 		}
 		if (bars) {
 			if (horiz) {
@@ -1642,7 +1784,8 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 # Copied from Antoine Thibaud and changed a little bit, as follows:
 # - renamed 'cant.bines' to 'groups'
 # - added parameter 'lwd' for the line width of the ROC line
-roc.1 <- function(formula, data, pos = 1, groups = 20, quantile.type = 1, round.AUX = 2, lwd=1){
+roc.1 <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.type = 1, round.AUC = 2, lwd=1, col=NULL,
+																 label=NULL, xlab="Proporcion de buenos identificados", ylab="Proporcion de malos identificados", title="Curva ROC", cex=0.8, cex.main=1)
   # Genera una curva roc a partir de un df con una columna de clase binaria y otra de probabilidades
   # Hace un rank de las probabilidades y construye una roc en base al mismo
   
@@ -1652,7 +1795,7 @@ roc.1 <- function(formula, data, pos = 1, groups = 20, quantile.type = 1, round.
   #   roc.1(clase ~ prob, mod2, pos = 2)
   #   roc.1(clase ~ prob, mod2, pos = 3)
   # donde mod1, mod2 y mod3 son dfs con clase y probabilidad predicha...
-  
+{
   df <- model.frame(formula, data)
   colnames(df) <- c('clase', 'pm')
   df$clase <- factor(df$clase)
@@ -1698,14 +1841,21 @@ roc.1 <- function(formula, data, pos = 1, groups = 20, quantile.type = 1, round.
   colnames(ult.fila) <- colnames(tbl.df)
   tbl.df <- rbind(tbl.df, ult.fila)
   
+  # Area Under the Curve
   AUC = -sum((((2 * tbl.df$S.acum2[-1]) - diff(tbl.df$S.acum2)) /2) * diff(tbl.df$N.acum2))
-  color = switch(pos, 'blue', 'green', 'red', 'black', 'purple', 'yellow')
+  # Accuracy Ratio = (2*AUC - 1) / P(NonEvent)
+  AR = (2*AUC - 1) / (tbl.df$N.acum[1] / (tbl.df$N.acum[1] + tbl.df$S.acum[1]))		# P(NonEvent) is computed on the first row of tbl.df
+  if (is.null(col)) {
+  	color = switch(pos, 'blue', 'green', 'red', 'black', 'purple', 'yellow')
+  } else {
+    color = col
+  }
   
   if (pos == 1) {
     plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color,
       xlim = c(0, 1), ylim = c(0, 1),
-      xlab = '% buenos eliminados', ylab = '% malos eliminados',
-      main = 'Curva ROC', lwd=lwd)
+      xlab = xlab, ylab = ylab,
+      main = title, cex.main=cex.main, lwd=lwd)
     lines(c(0, 1), c(0, 1), col = 'red', lty = 3)
   } else{
     par(new=TRUE)
@@ -1713,10 +1863,12 @@ roc.1 <- function(formula, data, pos = 1, groups = 20, quantile.type = 1, round.
       xlim = c(0, 1), ylim = c(0, 1), lwd=lwd,
       ann = FALSE, axes = FALSE)
   }
-  text(0.6, pos / 10, paste(deparse(substitute(data)), ': AUC = ', round(AUC, round.AUX)), cex = 0.8, col = color)
-  
-  tbl.df
-  
-  return(AUC)
+  if (is.null(label)) label = deparse(substitute(data))
+
+  text(0.6, cex * pos / 7, paste0(label, ':\nAUC=', formatC(AUC, format='g', round.AUC), ', AR=', formatC(AR, format='g', round.AUC)), cex = cex, col = color)
+
+	if (print) print(tbl.df)
+
+  return(list(AUC=AUC, AR=AR))
 }
 ########################################## EXTERNAL functions #################################
