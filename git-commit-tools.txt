@@ -1,0 +1,42 @@
+commit of Tools: 2014/03/28 - 2014/04/05 [COMMITTED]
+----------------------------------------
+datamining-functions.r:
+- New functions: 
+	- ModelFit(), model.fit(): evaluates the fit of a model by each of a set of input variables.
+- Updated functions:
+	- GroupCategories():
+		- it works also for continuous target variable
+		- it maps too small categories to the same group "other"
+- Bug fixes:
+	- GroupCategories()
+
+startup-functions.r:
+- New functions:
+	- parseVariable(), parse.variable(): parses a variable passed as variable names and/or numeric variables.
+		Ex: target="y" or target=tofit$y
+- Updated functions:
+	- pairs.custom():
+		- added a scaling of the points and labels by automatically adjusting the cex and inches parameter received by plot.binned() when this function is called as some of the panel functions. This is to avoid having the points and labels too big w.r.t. the actual plot size in the panel.
+		- the target parameter must now be a string referring to a variable name of the data frame used to create the pairs plot.
+	- plot.binned():
+		- Simplied the specification of the axis formats by removing parameters xlimProperty, ylimProperty, ylim2Property. Now the "new" or "orig" specifications should be directly passed to xlim, ylim, ylim2.
+- Bug fixes:
+	- Added try-catch statements in the following functions:
+		- panel.image() when calling kde2d()
+		- plot.binned() when calling lm() and loess() (especially is important for the latter)
+		This is to avoid collapse of the pairs.custom() function with its default call or using plot.binned() for the upper.panel function.
+	- plot.binned():
+		- took care of target variables having NAs (NAs are removed now using complete.cases())
+		- fixed error message when target was explicitly passed as target=NULL (changed if (!missing(target)) with if (!is.null(target)))
+		- took care of updating the ylim value when a pred variable is passed, so that the pred values fit in the plot.
+
+commit of Tools: 2014/04/05 - 2014/05/05 [COMMITTED]
+----------------------------------------
+Added git-commit-tools.txt and updated F1 function
+
+datamining-functions.r:
+- Updated functions:
+	- PrecisionRecall(), F1():
+		- new equivalent name for function F1(): PrecisionRecall()
+		- extended functionality so that it computes precision and recall for more than one cut-off value
+		- generates the plot of Recall vs. Precision

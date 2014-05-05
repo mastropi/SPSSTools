@@ -1,6 +1,6 @@
 # datamining-functions.r
 # Created: 		  03-Jul-2013
-# Modified: 	  26-Mar-2014
+# Modified: 	  15-Apr-2014
 # Author: 		  Daniel Mastropietro
 # Description: 	Set of Data Mining functions
 # Dependencies: startup-functions.r, from which the following functions are used:
@@ -14,7 +14,7 @@
 # Profiles, DistributionsByGroup (these are the same function with 2 different names, the first is more easily remembered in data mining)
 # InformationValue
 # ScoreDistribution
-# F1
+# PrecisionRecall, F1
 # ModelFit, model.fit
 
 # HISTORY:
@@ -25,15 +25,21 @@
 #									of GroupCategories().
 # - 2014/03/30: Created function:
 #								- ModelFit(), model.fit(): evaluates the model fit of a binary or continuous target by each input variable in a set of variables.
+# - 2014/04/15: Updated function GroupCategories():
+#								- Fixed the behaviour of the VERY PARTICULAR case when the LEFT category/group is too small and at the same time the RIGHT category/group
+#								is in the exclusions list. See section "NOT MERGE: FINALIZE NEW GROUP" for how this was done. Note that the fix works both when
+#								othergroup=TRUE and othergroup=FALSE.
+# - 2014/05/05: Updated function PrecisionRecall(), F1():
+#								- Extended the computation of precision and recall to a vector of cutoff values.
+#								- Added a plot= option to show a plot of Recall vs. Precision.
 #
-
 
 ######################################## GroupCategories ######################################
 # 2014/03/26
 # [DONE-2014/03/28] UNDER DEVELOPMENT: The code below works but needs to be setup as a function. It was tested in the Moni project.
-# The goal of this function is to group automatically contiguous categories of categorical variables based on 
-# Chi-Square test of 2x2 contingency table formed by x (the categorical variable under analysis) and y (the target variable of interest,
-# usually binary variable)
+# The goal of this function is to automatically group contiguous categories of categorical variables when they are sorted by 
+# the value of a target variable based on Chi-Square or t tests of 2x2 contingency tables formed by x
+# (the categorical variable under analysis) and y (the target variable of interest, usually binary variable)
 # The user should have the option of specifying particular categories that they want to leave alone (i.e. do not group with others)
 # There is also a threshold of the number of cases (and percent of cases) that a category should have NOT to be grouped.
 # Too small of categories should be placed together with the MEAN group (i.e. with the group having average target value) or 
@@ -54,12 +60,12 @@ GroupCategories = function(
 		stat="mean",				# Statistics to use for the computation of the representative value of y for each category of x when type != "cat"
 		varname=NULL,				# Name of the analyzed variable (useful when calling this function from within a FOR loop where x is passed as tofit[,v], where e.g. v = "x1"
 		# Settings for merging consecutive categories
-		pthr=c(0.50,0.10),	# Threshold for the p-value of the Chi-square test above which contiguous categories are merged
-												# Defaults to 0.5 for a categorical target and to 0.1 for continuous target
+		pthr=c(0.50,0.10),	# Threshold for the p-value of the Chi-square test or t test that is used to decide whether contiguous categories are merged.
+												# Defaults to 0.5 for a categorical target and to 0.1 for continuous target.
 		propthr=0.01,				# Minimum proportion of cases (w.r.t. to total number of cases in dataset) to be observed in a category so that it can be let alone
-		nthr=20,						# Minimum number of cases in a category so that it can be let alone
+		nthr=20,						# Minimum number of cases in a category so that the category can be let alone
 		othergroup=TRUE,		# Whether categories with too few cases (n < nthr) should be sent to the "other" group or instead joined to the category of the LEFT.
-		exclusions=NULL,		# Categories to be excluded from the merge (they should be left alone)
+		exclusions=NULL,		# Vector of categories to be excluded from the merge (they should be left alone)
 												# *** NOTE: exclusions COULD ALSO BE WISHED TO BE ASSIGNED TO A SINGLE GROUP CALLED "other" (note the small caps becase capital letters come before non-capital letters in the ASCII coding!) ***
 		# Output settings
 		print=TRUE,					# Whether to print messages about the merging of the categories and its properties
@@ -73,6 +79,7 @@ GroupCategories = function(
 #								and a chi-square statistic.
 # Parameters:		(See above)
 # Output:				A list containing the original barplot of y vs. x in 'bar' and the new barplot of y vs. grouped x in 'outbars'.
+# Examples:			GroupCategories(x, y, pthr=0.5, exclusions=c("ZZ-OTHER", "ZZZ-UNKNOWN"))
 {
 	#--------------------------------- Auxiliary functions --------------------------------------
 	# Test the difference between contiguous groups in terms of target variable
@@ -274,7 +281,8 @@ GroupCategories = function(
 	### Start looping on the rows of the matrix of new groups 'xout'
 	while (j < nrow(xout)) {
 		# Left and right x categories being compared
-		# (in general, the left category may just be the last x category existing in the GROUP to the left (when merges have already occurred))
+		# In general, the left category may be the last x category existing in the GROUP to the left (when merges have already occurred).
+		# The right category is defined as the x category that coincides with the next new group value (stored in rownames(xout)[j+1]
 		ileft = i
 		iright = which(categories==rownames(xout)[j+1])
 
@@ -322,7 +330,7 @@ GroupCategories = function(
 					if (print) cat("\n", tabstr, "--> LEFT category sent to OTHER group because size <", nthr, ":", rownames(xout)[j])
 					# Collapse the LEFT category/group to the "other" group 
 					xother = fxCollapseGroups(rbind(xother, xout[j,]), type)
-					ogroups = paste(ogroups, groups[j], 	sep=", ")
+					ogroups = paste(ogroups, groups[j], sep=", ")
 					# Add row j to the vector of row indices to be removed from xout
 					ind2remove = j
 					# Go to the next x category since the current i category was sent to the "other" group
@@ -395,25 +403,75 @@ GroupCategories = function(
 				i4test = i
 			}
 		} else {	# MERGE OR NOT MERGE?
-			#--------------------------- NOT MERGE: FINALIZE NEW GROUP ------------------------------
-			if (print) {
-				if (cond.exclusion.left) {
-					cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], "(exclusion) ;", rownames(xout)[j+1], "\n")
-				} else if (cond.exclusion.right) {
-					cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], ";", rownames(xout)[j+1], "(exclusion)\n")
+			#--------------------------- NOT MERGE: FINALIZE NEW GROUP (unless the left group is too small) ------------------------------
+			finalize = TRUE
+			# Before deciding to directly finalize the new group, check whether we ended up here because of EXCLUSIONS
+			# and in addition the LEFT category/group being analyzed is too small and should be sent to the "other" group or
+			# (when othergroup=FALSE) merged to the category/group coming to the right of the current RIGHT category/group.
+			# (if the latter is the case, the current LEFT category/group is actually switched with the RIGHT category/group so
+			# that it is analyzed on the next iteration)
+			if ((cond.exclusion.right & !cond.exclusion.left) & cond.ncases & ncases.left < nthr) {
+				if (othergroup) {
+					# Send the left category to the "other" group
+					# (this section is a copy of the first 3 statements of the section above where the left category is sent to the "other" group)
+					# (the last 4 statements are not needed here)
+					if (print) cat("\n", tabstr, "--> LEFT category sent to OTHER group because size <", nthr, ":", rownames(xout)[j], "\n")
+					# Collapse the LEFT category/group to the "other" group 
+					xother = fxCollapseGroups(rbind(xother, xout[j,]), type)
+					ogroups = paste(ogroups, groups[j], sep=", ")
+					# Remove the j row of xout since it was just sent to the "other" group and update groups[j] with groups[j+1]
+					xout = xout[-j,,drop=FALSE]
+					groups[j] = groups[j+1]
+					## *** Note that j should NOT be updated after removing the j-th row! 	 ***
+					## *** (because the j-th row of xout was just sent to the "other" group) ***
+					# Set finalize to FALSE because the current j group should NOT be finalized (since it was just sent to the "other" group)
+					finalize = FALSE
 				} else {
-					cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], ";", rownames(xout)[j+1], "\n")
+					# Switch the j row of xout with the j+1 row because the j+1 row is under the exclusion list and the j row should be merged with the
+					# next category/group that comes to the right of the current RIGHT category/group.
+					if (print) cat("\n", tabstr, "--> LEFT and RIGHT categories SWITCHED because of small left group size <", nthr, "and right group exclusion:", rownames(xout)[j], ";", rownames(xout)[j+1], "\n")
+					aux = xout[j,]
+					xout[j,] = xout[j+1,]
+					xout[j+1,] = aux
+					# Do the same switching with the groups[j] and groups[j+1] values
+					aux = groups[j]
+					groups[j] = groups[j+1]
+					groups[j+1] = aux
+					# Update iright so that it is correctly assigned to the i value to be used for the next loop below:
+					# iright should take the value of the last x category present in the NOW (j+1)-th group, groups[j+1] (which contains the former j-th group)
+					pos = max(unlist(gregexpr(", ", groups[j+1])))
+						## This is the last position of occurrence of a comma. If no comma is found, then -1 is returned,
+						## which is quite handy because I retrieve the number starting at position pos+2 (great!)
+						## Note that for this to work in the special case when no comma is found, the separator should EXACTLY be of length 2
+						## (so that -1 + 2 = 1, the first character of groups[j+1] when the group is not the result of merging x categories
+						## --i.e when no commas are found using gregexpr() above)
+					iright = as.numeric( substring(groups[j+1], pos+2) )
+				}
+			} else {
+				# No merging should be carried out nor any category should be sent to the "other" group nor switched with the current RIGHT category/group.
+				# This ELSE statement only contains strings to be printed out (when requested by parameter 'print')
+				if (print) {
+					if (cond.exclusion.left) {
+						cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], "(exclusion) ;", rownames(xout)[j+1], "\n")
+					} else if (cond.exclusion.right) {
+						cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], ";", rownames(xout)[j+1], "(exclusion)\n")
+					} else {
+						cat("\n", tabstr, "--> Categories NOT merged:", rownames(xout)[j], ";", rownames(xout)[j+1], "\n")
+					}
 				}
 			}
-			# No merging should be carried out nor any category should be sent to the "other" group.
-			# Therefore a new group has been defined and I can finalize it in xout with its full name
-			# (specifying which original x categories are part of it)
-			rownames(xout)[j] = groups[j]
-			# The current new group is finalized and we can now go to the next group => increment j by 1
-			# Note that after updating j, groups[j] will have the value of groups[j+1] prior to updating j. Therefore groups[j] is NEVER missing.
-			j = j + 1
 
-			# Set the next LEFT category to be the current RIGHT category of x
+			if (finalize) {
+				# If finalize=TRUE, a new group has been defined and I can finalize it in xout with its full name
+				# (specifying which original x categories are part of it)
+				rownames(xout)[j] = groups[j]
+				# The current new group is finalized and we can now go to the next group => increment j by 1
+				# Note that after updating j, groups[j] will have the value of groups[j+1] prior to updating j, which already had a value.
+				# Therefore groups[j] is NEVER missing.
+				j = j + 1
+			}
+
+			# Set the LEFT category for the next loop to be the current RIGHT category of x
 			# (note that the RIGHT category may NOT be obtained by doing (LEFT category index)+1... as there could have been categories in between that were sent to the "other" group)
 			i = iright
 			i4test = i
@@ -482,10 +540,18 @@ GroupCategories = function(
 		# Categories in the current group
 		xvalues = paste0("'", paste(rownames(bars)[ind], collapse="', '"), "'")
 			## Note that the first and last double quotes are NOT part of xvalues, they are shown because 'xvalues' is of type 'character'.
-		if (any(xother>0) & j == nrow(xout)) {
-			cat("Group (OTHER) (", length(ind), "):", xvalues, "\n")
+		# Number of cases and representative value of the y variable for each group (to print out below)
+		if (type == "cat") {
+			nvalue = sum(xout[j,col4ncases])
+			yvalue = prop.table(xout[j,col4ncases])[2]
 		} else {
-			cat("Group", j, "(", length(ind), "):", xvalues, "\n")
+			nvalue = xout[j,coln]
+			yvalue = xout[j,colmean]
+		}
+		if (any(xother>0) & j == nrow(xout)) {
+			cat("Group (OTHER) ( ncat =", length(ind), ", n =", nvalue, ", mean =", formatC(yvalue, format="g", digits=3), "):", xvalues, "\n")
+		} else {
+			cat("Group", j, "( ncat =", length(ind), ", n =", nvalue, ", mean =", formatC(yvalue, format="g", digits=3), "):", xvalues, "\n")
 		}
 		# Define the indices for retrieving the p-values of the merges or non-merges
 		if (j == nrow(xout) & !any(xother>0)) {
@@ -536,10 +602,19 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 # Parameters:		- dat: dataset to modify
 #								- vars: string or array with the ORIGINAL variable names
 #								- newvars: string or array with the NEW variable names
-#								- newvalues: List containing the new values to assign to each grouped category in each variable in newvars.
-#								- groupedCat: list containing the output from a call to the GroupCategories() function.
+#								- newvalues: List of vectors containing new values to be assigned. The structure of this list is as follows:
+#														 - each list element contains one vector and indexes a different variable listed in 'vars'
+#														 - the vector in each list element has the following properties:
+#																- its length is equal to the number of new categories to create in the corresponding variable listed in 'newvars'
+#																- it contains the values to use to represent the new categories to be stored in the corresponding variable listed in 'newvars'.
+#								- groupedCat: List containing the output from a call to the GroupCategories() function.
 #									Each element of the list is the result of applying the GroupCategories() function to each variable in vars.
 # Output:				The dataset 'dat' is returned containing the newly created variables specified in 'newvars'.
+# Examples:			vars.gc[[1]] = GroupCategories(x, y)
+#								vars.gc[[2]] = GroupCategories(z, y)
+#								newvalues[[1]] = c(10, 20, 999)																			# Categories of the new categorized variable x_cat
+#								newvalues[[2]] = c("1-GRP3", "2-GRP5", "ZZ-OTHER", "ZZZ-UNKNOWN")		# Categories of the new categorized variable z_cat
+#								AssignCategories(tofit, "x z", "x_cat z_cat", newvalues, vars.gc)
 {
 	# Check if the variables passed were passed as arrays (length>1) or strings (length=1)
 	if (length(vars) == 1) { vars = unlist(strsplit(vars,"[ \n]")) }
@@ -1906,7 +1981,7 @@ ScoreDistribution = function(
   }
 	# Before plotting, change the clipping of the objects to plot to the FIGURE so that when adding count labels to an existing plot
 	# they are fully visible even if part of them fall outside the plot region.
-	opar = par(xpd=TRUE)
+	opar = par(xpd=FALSE)
 	on.exit(par(xpd=opar$xpd), add=TRUE)
   if (h$equidist) {
     ylim = range(h$counts + 0.01*max(h$counts)) # +0.01*max() is to leave space for the counts on top of each histogram bar
@@ -2074,53 +2149,94 @@ ModelFit <- model.fit <- function(dat, target="y", score="p", vars="p", groups=2
 
 
 ############################################## F1 #############################################
-F1 = function(y, pred, cut, print=FALSE) {
+PrecisionRecall <- F1 <- function(
+		target,
+		score,
+		cuts=seq(0,1,0.1),
+		event=1,
+		plot=TRUE,
+		print=FALSE,
+		xlim=c(0,1),
+		ylim=c(0,1),
+		xlab="precision (True Events / # Predicted Events)",
+		ylab="recall (True Events / # Observed Events)",
+		add=FALSE,
+		pch=21,
+		col="black",
+		bg="black",
+		pos=3,
+		cex=0.7)
 # Created: 			16-Mar-2014
+# Modified:			05-May-2014
 # Author:				Daniel Mastropietro
 # Description:	Computes the F1 value for binary models for a given cutoff as taught at the Machine Learning course:
 #								F1 = 2*P*R/(P+R)
 #             	where P = Precision and R = Recall, i.e.
 #              	P = True Positives / Predicted Positives
 #             	R = True Positives / Observed Positives      (a.k.a Sensitivity)
-#	Parameters:		- y: vector of observed binary target
-#              	- pred: vector of predicted probabilities
-#              	- cut: cutoff value above which the event of interest is predicted (pred >= cut => prediction = event)
+#	Parameters:		- target: vector of observed binary target
+#              	- score: vector of predicted probabilities
+#              	- cuts: number representing a single cutoff or vector of cutoff values above which the event of interest is predicted (i.e. when pred >= cut => prediction = event).
+#												When more than one cutoff values is given, the precision and recall for each of those cutoff values is returned as vectors.
+#								- event: event of interest for the model prediction
+#								- plot: whether to show a plot of Recall (Sensitivity) vs. Precision
 #								- print: whether to show the 2x2 table of Observed vs. Predicted events for the chosen cutoff value.
-# Output: A list containing the cut value, the Precision, the Recall and the F1 values is returned
-#
-  
+#								- graphical parameters used when plot=TRUE follow.
+# Output: 			A list containing the cut values and the Precision, Recall and F1 values for each cutoff.
+# Examples:			pr = PrecisionRecall(tofit$y, tofit$p, plot=FALSE)
+#								plot(pr$precision, pr$recall, type="b", pch=21, bg="black")
+#								text(pr$precision, pr$recall, pr$cuts, offset=0.5, pos=1, cex=0.7)
+{
   ### Observed values
-  # Observed Events
-  OE = as.numeric(y==1)
-  # Observed Non-Events
-#  ONE = as.numeric(y!=1)
+  OBS = as.numeric(target==event)
   
   ### Predicted values
-  # Predicted Events
-  PE = as.numeric(pred >= cut)
-  # Predicted Non-Events
-#  PNE = as.numeric(pred < cut)
-  
-  ### Classification table
-  if (print) print(table(OE, PE))
-  
-  ### Precision, Recall and F1
-  TP = sum(PE==1 & PE==OE)
-  # Precision
-  if (sum(PE) == 0) {
-    precision = NA
-  } else {
-    precision = TP / sum(PE)      # Note: for cut = 0, precision = event rate! (because all predicted values are classified as "Event", therefore the True Positives gives the number of events => precision = TP/#cases = event rate)
-  }
-  # Recall
-  recall = TP / sum(OE)         # a.k.a sensitivity
-  # F1
-  if (is.na(precision) | (precision + recall) == 0) {
-    F1 = NA
-  } else {
-    F1 = 2*precision*recall / (precision + recall)
-  }
+  c = 0
+  ncuts = length(cuts)
+  precision = vector(ncuts, mode="numeric")
+  recall = vector(ncuts, mode="numeric")
+  F1 = vector(ncuts, mode="numeric")
+  for (cut in as.vector(cuts)) {
+  	c = c + 1
+		# Predicted Values
+		PRED = as.numeric(score >= cut)
 
-  return(list(cut=cut, precision=precision, recall=recall, F1=F1))
+		### Classification table
+		if (print) {
+			cat("\nCutoff value", c, "of", ncuts,":", cut, "\n");
+			print(table(OBS, PRED))
+		}
+
+		### Precision, Recall and F1 (they are all based on the True Positives --i.e. NOT on the True Negatives)
+		# True Positives
+		TP = sum(PRED==1 & PRED==OBS)
+		# Precision
+		if (sum(PRED) == 0) {
+			precision[c] = NA
+		} else {
+			precision[c] = TP / sum(PRED)
+				## Note: for cut = 0, precision = event rate! (because all predicted values are classified as "Event",
+				## therefore the True Positives gives the number of events => precision = TP/#cases = event rate).
+		}
+		# Recall (a.k.a Sensitivity)
+		recall[c] = TP / sum(OBS)
+		# F1 value = 2*P*R/(P+R)
+		if (is.na(precision[c]) | (precision[c] + recall[c]) == 0) {
+			F1[c] = NA
+		} else {
+			F1[c] = 2*precision[c]*recall[c] / (precision[c] + recall[c])
+		}
+	}
+
+	if (plot & ncuts > 1) {
+		if (add) par(new=TRUE)
+		# Recall is shown on the vertical axis because Recall = Sensitivity and Sensitivity usually goes on the vertical axis
+		plot(precision, recall, type="b", pch=pch, col=col, bg=bg, xlim=xlim, ylim=ylim, xlab=xlab, ylab=ylab)
+		opar = par(xpd=TRUE); on.exit(par(xpd=opar$xpd))
+		text(precision, recall, cuts, pos=pos, cex=cex)
+		title(sub="Label is cut-off value", cex.sub=0.8)
+	}
+
+	return(list(cuts=cuts, precision=precision, recall=recall, F1=F1))
 }
 ############################################## F1 #############################################

@@ -41,6 +41,123 @@ require(grDevices)# For colorRampPalette() (used in biplot.custom)
 require(MASS)     # For kde2d() etc. (used at least in pairs.custom)
 
 
+########################################## FUNCTIONS TO ADD ###################################
+plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=0.01, add=TRUE, plot.kde=FALSE, plot.id=TRUE, lwd=1, col.outlier="red", cex=0.6, pos=3, srt=0, ...)
+# Created: 20-Apr-2014
+# Author: Daniel Mastropietro
+# Parameters:   cutoff: when (estimated gaussian density) / max(estimated gaussian density) < cutoff => flag the point as outlier
+#								srt: degrees of rotation for the text shown by text() (e.g. srt=90). This is a par() option that applies only to text.
+{
+  ### Data prep
+  # Remove missing values in data
+  if (is.null(y)) {
+    varnames = colnames(x)
+    y = x[,2]
+    x = x[,1]
+  } else {
+    varnames = c(deparse(substitute(x)), deparse(substitute(y)))
+  }
+  indok = !is.na(x) & !is.na(y)
+  # Store the data good for analyzing
+  xy = cbind(x[indok],y[indok])
+  # Name the rows using the id variable
+  if (!is.null(id)) rownames(xy) = id[indok]
+  
+  # Plot
+  if (add) {
+    points(xy, ...)
+  } else {
+    plot(xy, ...)
+  }
+  #  do.call(plot.fun, list(xy, ...))     # This does NOT work!! it generates a plot showing all the values to be plotted and it's a mess!!!!
+  centroid = apply(xy, 2, FUN=center)
+  SIGMA = do.call(scale, list(xy))
+  # Assume multivariate normality to compute density function to compare with cutoff value
+  # I could Use the mahalanobis() function which already returns the square of the mahalanobis distance
+  # but here I do it myself to show how to avoid computing non-relevant innter products in the computation of such distance!
+  # (taken from mahalanobis() code)
+  xyc = sweep(xy, 2, centroid)  # The sweep operator takes care of doing the right operation along the different rows of xy (this is equivalent to the more cumbersome t(t(xy) - centroid)
+  maha2 = rowSums((xyc %*% solve(SIGMA)) * xyc) # VERY SMART CALCULATION!
+  gaussian.density = exp(-0.5*maha2) / (2*pi*sqrt(det(SIGMA)))
+  names(gaussian.density) = rownames(xy)
+  
+  # Plot the estimated density surface
+  #   redblue.palette = colorRampPalette(c("red", "blue"))
+  #   ncol = 50
+  #   colors = redblue.palette(ncol)
+  #   denscol = cut(dens2, quantile(dens2, probs=seq(0,1,1/ncol)))
+  #   persp(gx, gy, dens2, col=colors[denscol], ticktype="detailed", theta=40, phi=20)
+  
+  ### 2D density estimation
+  if (plot.kde) {
+    xy.kde = kde2d(xy[,1], xy[,2])
+    contour(xy.kde$x, xy.kde$y, xy.kde$z, col="green", nlevels=5, add=TRUE, lwd=lwd)
+  }
+  
+  ### Compute the normal density in order to generate a contour plot (ellipses)
+  # Generate the grid
+  xrange = range(x)
+  yrange = range(y)
+  gx = seq.int(xrange[1], xrange[2], length.out=25)
+  gy = seq.int(yrange[1], yrange[2], length.out=25)
+  # Create all possible combinations of gx and gy where the normal density should be computed
+  xgrid = rep(gx, length(gy))
+  ygrid = sort(rep(gy, length(gx)))
+  xygrid = cbind(xgrid, ygrid)
+  dens2 = exp(-0.5*mahalanobis(xygrid, centroid, SIGMA)) / sqrt(2*pi*det(SIGMA))
+  # Convert dens2 to a matrix of size (length(xgrid) * length(ygrid))
+  dens2 = matrix(dens2, nrow=length(gx), ncol=length(gy))
+  contour(gx, gy, dens2, nlevels=5, add=TRUE, lwd=lwd, col="blue")
+  points(centroid[1], centroid[2], pch="x", lwd=lwd, cex=2, col="blue")
+  
+  # Using the ellipse() function...
+  gaussian.cutoff = cutoff*max(gaussian.density)
+  #  print(quantile(gaussian.density, probs=seq(0,1,1/100)))
+  cat("Max of estimated gaussian density:", formatC(max(gaussian.density), format="e", digits=4), "\n")
+  cat("Cut off value ( based on cutoff level", cutoff, "):", formatC(gaussian.cutoff, format="e", digits=4), "\n")
+  cat("Min of estimated gaussian density:", formatC(min(gaussian.density), format="e", digits=4), "\n")
+  maha2.cutoff = -2 * log(2*pi*sqrt(det(SIGMA)) * gaussian.cutoff)
+  try( ellipsem(centroid, solve(SIGMA), maha2.cutoff , col=col.outlier, lwd=lwd) )
+  
+  # Show the cutoff ellipse
+  # NOTE: the above call to ellipse() is more reliable in terms of showing the actual cutoff
+  #  contour(gx, gy, dens2, levels=cutoff*max(gaussian.value), add=TRUE, lwd=lwd, col="red")
+  
+  outliers = which(gaussian.density < gaussian.cutoff)
+  if (length(outliers) > 0) {
+    cat("Number of outliers detected for variables", varnames, ":", length(outliers), "(", formatC(length(outliers) / nrow(xy) * 100, format="g", digits=1), "%)\n")
+    points(xy[outliers,], pch=21, bg=col.outlier, col=col.outlier)
+    if (plot.id) {
+      op = par(xpd=TRUE)
+      text(xy[outliers,], labels=rownames(xy)[outliers], offset=0.5, pos=pos, srt=srt, cex=cex)
+      par(xpd=op$xpd)
+    }
+  } else {
+    cat("Number of outliers detected for variables", varnames, ":", length(outliers), "(", formatC(length(outliers) / nrow(xy) * 100, format="g", digits=1), "%)\n")
+    cat("No outliers detected.\n")
+  }
+  
+  invisible(outliers)
+}
+
+# Trying to generate the equivalent panel function (with add=TRUE always) but it does not work.
+# I get the error "y is missing" at the do.call(plot,...) ... WHY??
+panel.outliers2d = function(x, y, id=NULL, center=median, scale=cov, cutoff=0.01, plot.kde=FALSE, plot.id=TRUE, lwd=1, cex=0.6, pos=3, srt=0, ...)
+{
+  ### Parse the function call
+  call = match.call()
+  # Put all calling parameters into a parameter list
+  paramsList = as.list(call)
+  # Remove the function name from the parameter list
+  paramsList[[1]] = NULL
+  # Set the add parameter to TRUE
+  paramsList$add = TRUE
+  print(paramsList)
+  do.call("plot.outliers2d", paramsList)
+}
+########################################## FUNCTIONS TO ADD ###################################
+
+
 ######################################### GENERAL functions ###################################
 # INDEX (sorted alphabetically)
 # getAxisLimits
@@ -635,16 +752,17 @@ plot.binned = function(
   lm=TRUE, loess=TRUE,
   circles=NULL, thermometers=NULL,  # 'circles' and 'thermometers' must be EXPRESSIONS that parameterize the corresponding symbol based on the computed grouped values (e.g. circles=expression(x_n) or thermometers=expression(cbind(x_n,y_n,target_center)), since these values would not exist during the function call)
   col="light blue", col.pred="black", col.target="red", col.lm="blue", col.loess="green",
-	pointlabels=TRUE, bands=FALSE, width=2, stdCenter=TRUE, # stdCenter: whether to show the bands using the standard deviation of the *summarized* y value (calculated as scale/sqrt(n), where n is the number of cases in the x category)
+	pointlabels=TRUE, bands=FALSE, width=1, stdCenter=TRUE, # stdCenter: whether to show the bands using the standard deviation of the *summarized* y value (calculated as scale/sqrt(n), where n is the number of cases in the x category), instead of showing the standard deviation of the y value, i.e. +/- 'scale'.
   boxplots=FALSE, add=FALSE, offset=1, inches=0.5, size.min=0.05, cex.label=1,
 	xlab=NULL, ylab=NULL, xlim=NULL, ylim=NULL, ylim2=NULL,  # ylim for the secondary axis used to plot the target values
+	xlimProperty=xlim, ylimProperty=ylim, ylim2Property=ylim,
 		# xlim, ylim, ylim2 can be either a regular c(minvalue, maxvalue) or a character value: "new" or "orig"
 		# in order to specify whether the new scale coordinates (after binning) or the ORIGINAL values should be used as axis limits
 		# within a pairs() call the same axis scales are expected to be shown for ALL panels, unless missing values vary across variables.
   type2="b", pch2=21,	  # type and pch par() options defining the form and symbol of the target variable
   xaxt="s", yaxt="s",
-	addXAxis=(xlimProperty!="orig"), addYAxis=(ylimProperty!="orig"), # addXAxis, addYAxis: Whether to manually add the x/y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
-  addY2Axis=(ylim2Property!="orig"), # addY2Axis: whether to manually add the secondary y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this is set to TRUE when the secondary axis limits are NOT requested to be in the original coordinates --in which case the secondary y-axis have the same range for all pairs plots)
+	addXAxis=(xlim!="orig"), addYAxis=(ylim!="orig"), # addXAxis, addYAxis: Whether to manually add the x/y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
+  addY2Axis=(ylim2!="orig"), # addY2Axis: whether to manually add the secondary y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this is set to TRUE when the secondary axis limits are NOT requested to be in the original coordinates --in which case the secondary y-axis have the same range for all pairs plots)
 	title=NULL,
 	clip="figure",				# clipping area, either "figure" or "region". This parameter affects the xpd option of par(). Note that "region" is the default in par() but here I set "figure" to the default so that big bubbles are shown full --instead of being partially hidden by the axes.
 	plot=TRUE, print=TRUE, ...)
@@ -717,8 +835,8 @@ plot.binned = function(
     xaxt = "n"
     yaxt = "n"
   } else {
-    if (!exists("xaxt", envir=sys.nframe())) { xaxt = par("xaxt") }
-    if (!exists("yaxt", envir=sys.nframe())) { yaxt = par("yaxt") }
+    if (!exists("xaxt", envir=sys.nframe(), mode="name")) { xaxt = par("xaxt") }
+    if (!exists("yaxt", envir=sys.nframe(), mode="name")) { yaxt = par("yaxt") }
     # Axis labels
     if (missing(xlab)) { xlab = deparse(substitute(x)) }
     if (missing(ylab)) { ylab = deparse(substitute(y)) }
@@ -828,6 +946,12 @@ plot.binned = function(
 	# Loess fit (local regression, weighted by the number of cases in each group)
 	if (loess)  { loessfit = try( loess(y_center ~ x_center, weights=x_n) ) }
 
+	# Parse the *limProperty variables and if passed assign their values to the corresponding *lim variables
+	# This was done to circumvect the problem when this function is called as a panel function in pairs() and trying to pass
+	# the parameter e.g. ylim="new". The pairs() function also receives the ylim parameter and it does not accept a non-numeric value!
+	if (!missing(xlimProperty)) { xlim = xlimProperty }
+	if (!missing(ylimProperty)) { ylim = ylimProperty }
+	if (!missing(ylim2Property)) { ylim2 = ylim2Property }
   # X-axis limits (use the original range?)
   if (is.null(xlim) || tolower(xlim) == "orig") {
     # Use the range of the ORIGINAL x values (before computing the summary statistic value for each x_cat)
@@ -1457,7 +1581,7 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
       op = par()
       par(xpd=TRUE)
       points(X[indOutliers,], pch=21, col="black", bg="black", cex=0.5)
-      text(X[indOutliers,], label=label, pos=4, cex=0.5)
+      text(X[indOutliers,], label=label, offset=0.1, pos=3, cex=0.5)
       mtext(paste(signif(length(indOutliers)/n*100,1), "% of the observations are identified as outliers"), side=3, cex=0.8)
       par(xpd=op$xpd)
     }
@@ -1531,17 +1655,24 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
       rownames = indOutliers
     }
     rownames(outliers) = rownames
+    # Sort the outliers by decreasing hat value (so that I can easily label them in the leverage plot below and for convenience for the user)
+    outliers = outliers[order(outliers$leverage, decreasing=TRUE),]
     # Show the distribution of leverage values
     cat("Distribution of leverage values\n")
     ord = order(hat,decreasing=TRUE)
-    if (!is.null(pointlabels)) {
-    	ind = pointlabels
-    } else {
-    	ind = 1:length(hat)
-    }
-    plot(hat[ord], main="Leverage values", xlab=deparse(substitute(pointlabels)), type="p", pch=21, col="black", bg="black", xaxt="n")
-    lines(hat[ord], col="black")
-    mtext(ind[ord], side=1, at=1:length(hat), las=3, cex=0.5)
+#    if (!is.null(pointlabels)) {
+#    	ind = pointlabels
+#    } else {
+#    	ind = 1:length(hat)
+#    }
+		# Use as x values the percentage accumulated 
+		ind = (1:length(hat))/length(hat)*100
+    plot(ind, hat[ord], main="Leverage values", xlab="Cumulative Percent of Cases", ylab="Standardized Mahalanobis distance", type="p", pch=21, col="black", bg="black", xaxt="n")
+    lines(ind, hat[ord], col="black")
+    #mtext(ind[ord], side=1, at=1:length(hat), las=3, cex=0.5)
+		axis(side=1, at=seq(0,100,10), labels=FALSE)
+		mtext(side=1, at=seq(0,100,10), line=1, text=paste(formatC(seq(0,100,10), format="g", digits=3), "%", sep=""))
+    text(ind[1:nrow(outliers)], outliers$leverage, labels=rownames(outliers), offset=0.3, pos=4, cex=0.7)
     print(summary(hat))
     return(outliers)
   }
@@ -1556,6 +1687,10 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 # Parameters:   x: A numeric array
 # Output:       A matrix containing the CDF of x where the row names are the quantile values defined in 'probs'.
 # Assumptions:  There are no missing values (NA) in the data!
+#
+# HISTORY:	(2014/04/15)
+#						Fixed a bug related to the variables xlab and ylab that were found as functions in the ggplot2 namespace.
+#						Added for this the option mode="name" in the exists() function that checks for existence of xlab and ylab.
 {
 	# Stop if X is not numeric (e.g. stop if it is character or if it is a matrix of more than one column)
 	stopifnot(is.numeric(x))
@@ -1573,12 +1708,12 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 	
 	# Plot
 	# Define default values for graphical parameters (by checking whether the user passed any of those defined)
-	if (!exists("ylab", envir=sys.nframe())) { type = "l" } 
-	if (!exists("xaxt", envir=sys.nframe())) { xaxt = par("xaxt") }
-	if (!exists("yaxt", envir=sys.nframe())) { yaxt = par("yaxt") }
-	if (!exists("xlab", envir=sys.nframe())) { xlab = deparse(substitute(x)) }
-	if (!exists("ylab", envir=sys.nframe())) { ylab = "cdf" } 
-	if (!exists("main", envir=sys.nframe())) { main = paste("Total cases:", length(x)-na.check) }
+	if (!exists("type", envir=sys.nframe(), mode="name")) { type = "l" } 
+	if (!exists("xaxt", envir=sys.nframe(), mode="name")) { xaxt = par("xaxt") }
+	if (!exists("yaxt", envir=sys.nframe(), mode="name")) { yaxt = par("yaxt") }
+	if (!exists("xlab", envir=sys.nframe(), mode="name")) { xlab = deparse(substitute(x)) }
+	if (!exists("ylab", envir=sys.nframe(), mode="name")) { ylab = "cdf" } 
+	if (!exists("main", envir=sys.nframe(), mode="name")) { main = paste("Total cases:", length(x)-na.check) }
   if (add) {
     # Do not show the axis ticks nor the x label when the plot is added to an existing graph
     xaxt = "n"
@@ -1586,7 +1721,7 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
     xlab = ""
 	}
 
-	# Construct the CDF values to plot on the vertical axis from the names of the x.dist array
+  # Construct the CDF values to plot on the vertical axis from the names of the x.dist array
 	cdf.values = as.numeric(gsub("%","",names(x.cdf)))
 	par(new=add)
 	plot(x.cdf, cdf.values, type=type, xlab=xlab, ylab=ylab, xaxt=xaxt, yaxt=yaxt, main=main, ...)
@@ -1784,6 +1919,7 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 # Copied from Antoine Thibaud and changed a little bit, as follows:
 # - renamed 'cant.bines' to 'groups'
 # - added parameter 'lwd' for the line width of the ROC line
+# - added report of AR (Accuracy Ratio) or Gini Index along with the AUC.
 roc.1 <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.type = 1, round.AUC = 2, lwd=1, col=NULL,
 																 label=NULL, xlab="Proporcion de buenos identificados", ylab="Proporcion de malos identificados", title="Curva ROC", cex=0.8, cex.main=1)
   # Genera una curva roc a partir de un df con una columna de clase binaria y otra de probabilidades
@@ -1843,8 +1979,15 @@ roc.1 <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.typ
   
   # Area Under the Curve
   AUC = -sum((((2 * tbl.df$S.acum2[-1]) - diff(tbl.df$S.acum2)) /2) * diff(tbl.df$N.acum2))
-  # Accuracy Ratio = (2*AUC - 1) / P(NonEvent)
-  AR = (2*AUC - 1) / (tbl.df$N.acum[1] / (tbl.df$N.acum[1] + tbl.df$S.acum[1]))		# P(NonEvent) is computed on the first row of tbl.df
+  # Accuracy Ratio or Gini Index = (2*AUC - 1).
+  # Note that the AUC is already independent of event rate and that is why the event rate is not needed to compute the AR or Gini index.
+  # The Gini index is the ratio of the ABSS and 0.5, where:
+  # ABSS = Area Between the...
+  # 	- Sensitivity curve = "True Positive Rate as a function of decreasing score" = "%Hits of Events as a function of decreasing score"
+  # 	- (1-Specificity) curve = "False positive Rate as a function of decreasing score" = "%Hits of Non-Events as a function of decreasing score"
+  # and 0.5 = the maximum possible ABSS area (i.e. the area between the OPTIMUM Sensitivity and (1-Specificity) curves).
+  # For more info, see my notes on the Nemo notebook started at Meridian in Mexico.
+  AR = 2*AUC - 1
   if (is.null(col)) {
   	color = switch(pos, 'blue', 'green', 'red', 'black', 'purple', 'yellow')
   } else {
@@ -1865,10 +2008,10 @@ roc.1 <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.typ
   }
   if (is.null(label)) label = deparse(substitute(data))
 
-  text(0.6, cex * pos / 7, paste0(label, ':\nAUC=', formatC(AUC, format='g', round.AUC), ', AR=', formatC(AR, format='g', round.AUC)), cex = cex, col = color)
+  text(0.6, cex * pos / 7, paste0(label, ':\nAUC=', formatC(AUC, format='g', round.AUC), ', AR/Gini=', formatC(AR, format='g', round.AUC)), cex = cex, col = color)
 
 	if (print) print(tbl.df)
 
-  return(list(AUC=AUC, AR=AR))
+  return(list(data=tbl.df, AUC=AUC, AR=AR))
 }
 ########################################## EXTERNAL functions #################################
