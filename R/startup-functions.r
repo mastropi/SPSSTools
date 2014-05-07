@@ -28,6 +28,9 @@
 # - 2014/03/26: Created function:
 #								- plot.bar(), plot.bars(): makes a bar plot of a target variable in terms of categorical variable
 #									where the bar widths are proportional to the number of cases in each category.
+# - 2014/05/07: Created function cumplot() used to plot cumulative y vs. cumulative x.
+#								It can be used for continuous model fit analysis for the predicted value and by input variable
+#								A binary 0/1 target variable is allowed.
 #
 
 # TODO:
@@ -137,7 +140,7 @@ plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=
     cat("No outliers detected.\n")
   }
   
-  invisible(outliers)
+  return(invisible(outliers))
 }
 
 # Trying to generate the equivalent panel function (with add=TRUE always) but it does not work.
@@ -308,7 +311,8 @@ whos = function(envir=.GlobalEnv, sortby=c("name","size"), decreasing=FALSE)
 
 # 2013/08/18
 # Group of numeric variable using equal-size groups similar to the quantile() function but using weights for each observation.
-# Motivation: create quantile groups based on the estimated density of a numeric variable so that the histogram bins are smaller where the density is larger
+# Motivation: create quantile groups based on the estimated density of a numeric variable so that the histogram bins are smaller
+# where the density is larger.
 # For an example see: dev\Density&Histogram.r
 quantile.weight = function(x, weight, probs=seq(0,1,0.25), type=4, precision=4)
   # Parameters:
@@ -407,6 +411,7 @@ logitInv = function(x, adjust=0)
 
 ######################################### GRAPHICAL functions #################################
 # INDEX (sorted alphabetically)
+# cumplot (NEW May-2014)
 # hist.log
 # biplot.custom
 # pairs.custom
@@ -1170,7 +1175,7 @@ plot.binned = function(
   output = list(data=toplot)
   if (lm)    { output$lm.fit = lmfit }
   if (loess) { output$loess.fit = loessfit }
-  return(output)
+  return(invisible(output))
 }
 
 
@@ -1726,9 +1731,10 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 	par(new=add)
 	plot(x.cdf, cdf.values, type=type, xlab=xlab, ylab=ylab, xaxt=xaxt, yaxt=yaxt, main=main, ...)
 	
-	return(as.matrix(x.cdf))
+	return(invisible(as.matrix(x.cdf)))
 }
 
+# Bar plot of a categorical variable with categories sorted by a target variable
 plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE, horiz=FALSE, bars=TRUE, width=1, cex.names=0.6, las=3, col.bars="black", plot=TRUE, ...)
 # Created:      26-Mar-2014
 # Modified:   	26-Mar-2014
@@ -1909,7 +1915,66 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 		tab = cbind(tab.counts[ord,], tab)
 	}
 
-	return(tab)
+	return(invisible(tab))
+}
+
+
+# Cumulative plots of y vs. x
+cumplot = function(x, y, plot=TRUE, type="l", ...)
+# Created:      07-May-2014
+# Modified:     07-May-2014
+# Description:  Plot cumulative y vs. cumulative x values. Target variable y can be continuous or binary 0/1.
+# Details:			Missing values are allowed in x and/or y. Only cases with no missing values in both variables are used.
+# Parameters:   - x: A numeric array representing the continuous variable to analyze
+#								- y: A numeric array representing the target variable to analyze
+#								- plot: Whether to generate the plot or just returned the data frame containing the data to plot
+#								- type: Value of 'type' parameter of plot().
+#								- ...: Additional parameters received by the plot() function, except type, xlab, ylab.
+# Output:				A data frame containing the following columns:
+#								- x:				x values sorted increasingly
+#								- y:				y values sorted by increasing order of x
+#								- xcum:			cumulative x values
+#								- xcumpct:	% cumulative y values
+#								- ycum:			cumulative y values
+#								- ycumpct:	% cumulative y values
+#								- ncum:			cumulative number of cases
+#								- ncumpct:	% cumulative number of cases
+#								When plot=TRUE, a plot is generated of ycumpct vs. xcumpct.
+# Assumptions:  None
+#
+# HISTORY:	(2014/05/07)
+#						Function created.
+#
+{
+  # Sort the data by increasing x
+  toplot = data.frame(x=x, y=y)
+  # Keep cases with non missing values
+  toplot = na.omit(toplot)
+  n = nrow(toplot)
+
+  # Sort by increasing x
+  ord = order(toplot$x)
+  toplot = toplot[ord,]
+  
+  # % Cumulative x values
+  toplot$xcum = cumsum(toplot$x)
+  toplot$xcumpct = toplot$xcum / toplot$xcum[n] * 100
+  # % Cumulative y values
+  toplot$ycum = cumsum(toplot$y)
+  toplot$ycumpct = toplot$ycum / toplot$ycum[n] * 100
+  # % Cumulative number of cases
+  toplot$ncum = 1:n
+  toplot$ncumpct = 1:n/n * 100
+
+  # Plot
+  if (plot) {
+    #plot(toplot$x, toplot$ycumpct, type="l")
+    plot(toplot$xcumpct, toplot$ycumpct, type=type, xlab=paste("% Cumulative", deparse(substitute(x)), "values"), ylab=paste("% Cumulative", deparse(substitute(y)), "values"), ...)
+    abline(0,1)
+    #plot(toplot$ncumpct, toplot$ycumpct/er, type="l"); abline(0,1)  # Note the division by er of ycumpct so that its maximum is 100% (and not the event rate)
+  }
+
+  return(invisible(toplot))
 }
 ######################################### GRAPHICAL functions #################################
 
@@ -2012,6 +2077,6 @@ roc.1 <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.typ
 
 	if (print) print(tbl.df)
 
-  return(list(data=tbl.df, AUC=AUC, AR=AR))
+  return(invisible(list(data=tbl.df, AUC=AUC, AR=AR)))
 }
 ########################################## EXTERNAL functions #################################

@@ -40,3 +40,13 @@ datamining-functions.r:
 		- new equivalent name for function F1(): PrecisionRecall()
 		- extended functionality so that it computes precision and recall for more than one cut-off value
 		- generates the plot of Recall vs. Precision
+
+commit of Tools: 2014/04/05 - 2014/05/05 [COMMITTED]
+----------------------------------------
+New function cumplot() in startup-functions.r
+
+startup-functions.r:
+- New functions:
+	- cumplot(): Plot of cumulative y vs. cumulative x. Target y can be continuous or binary 0/1.
+- Updated functions:
+	- In all functions where it was reasonable (basically functions that optionally generate plots), return() statements were replaced with return(invisible()) so that nothing is shown to the user when the return value is not assigned to a variable.
