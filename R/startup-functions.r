@@ -1919,17 +1919,20 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 }
 
 
-# Cumulative plots of y vs. x
-cumplot = function(x, y, plot=TRUE, type="l", ...)
+# Cumulative plots of y vs. cumulative x
+cumplot = function(x, y, decreasing=TRUE, plot=TRUE, type="l", col="blue", ...)
 # Created:      07-May-2014
 # Modified:     07-May-2014
 # Description:  Plot cumulative y vs. cumulative x values. Target variable y can be continuous or binary 0/1.
 # Details:			Missing values are allowed in x and/or y. Only cases with no missing values in both variables are used.
 # Parameters:   - x: A numeric array representing the continuous variable to analyze
 #								- y: A numeric array representing the target variable to analyze
+#								- decreasing: Whether to sort the x values in decreasing order when computing its cumulative values and cumulative cases.
+#									Default: TRUE, so that a CONCAVE/CONVEX curve on the left plot means a CONCAVE/CONVEX relationship between y and x.
 #								- plot: Whether to generate the plot or just returned the data frame containing the data to plot
-#								- type: Value of 'type' parameter of plot().
-#								- ...: Additional parameters received by the plot() function, except type, xlab, ylab.
+#								- type: Value of 'type' parameter of the generated plot()
+#								- col: Value of 'col' parameter of the generated plot()
+#								- ...: Additional parameters received by the plot() function, except type, col, xlab, ylab.
 # Output:				A data frame containing the following columns:
 #								- x:				x values sorted increasingly
 #								- y:				y values sorted by increasing order of x
@@ -1952,9 +1955,14 @@ cumplot = function(x, y, plot=TRUE, type="l", ...)
   toplot = na.omit(toplot)
   n = nrow(toplot)
 
-  # Sort by increasing x
-  ord = order(toplot$x)
+  # Sort by increasing/decreasing values of x
+  ord = order(toplot$x, decreasing=decreasing)
   toplot = toplot[ord,]
+  if (decreasing) {
+  	TopBottom = "Top"
+  } else {
+  	TopBottom = "Bottom"
+  }
   
   # % Cumulative x values
   toplot$xcum = cumsum(toplot$x)
@@ -1968,10 +1976,26 @@ cumplot = function(x, y, plot=TRUE, type="l", ...)
 
   # Plot
   if (plot) {
-    #plot(toplot$x, toplot$ycumpct, type="l")
-    plot(toplot$xcumpct, toplot$ycumpct, type=type, xlab=paste("% Cumulative", deparse(substitute(x)), "values"), ylab=paste("% Cumulative", deparse(substitute(y)), "values"), ...)
+  	op = par(mfrow=c(1,2), mar=c(4,0,0,2), oma=c(0,4,3,0), no.readonly=TRUE); on.exit(par(op))
+    #plot(toplot$x, toplot$ycumpct, type="l")		# This plot allows SEEING the distribution of x
+    # Plot of Cumulative y values vs. Cumulative x values
+    plot(toplot$xcumpct, toplot$ycumpct, type=type, col=col, xlab=paste(TopBottom, "% values"), ylab=NULL, cex.lab=0.9, ...)
     abline(0,1)
-    #plot(toplot$ncumpct, toplot$ycumpct/er, type="l"); abline(0,1)  # Note the division by er of ycumpct so that its maximum is 100% (and not the event rate)
+    ### NO! UNFORTUNATELY THIS DOES NOT SHOW WHETHER THE RELATIONSHIP IS LINEAR! What it shows is whether the density of points of y
+    ### is similar to the density of points of x... (because it means that the accumulation of x is like the accumulation of y
+    ### meaning that the increase in x is similar to the increase in y values) In fact, if a few values of x are too large
+    ### the % accumulation of x will be very different than the % accumulation of y. This effect can easily be seen when
+    ### x = salary and compare the curve obtained with the one obtained when x = safeLog(salary): the former curve has more "panza"
+    ### than the latter curve, but it doesn't mean that the relationship between y and salary is less linear than the relationship
+    ### with safeLog(salary).
+    title(sub="(to check linear/non-linear relationship(?))", line=2, cex.sub=0.7)
+    # Plot of Cumulative y values vs. percentile of x (where lower percentiles correspond to lower x values)
+    plot(toplot$ncumpct, toplot$ycumpct, type=type, col=col, xlab=paste(TopBottom, "% cases"), ylab=NULL, cex.lab=0.9, ...)
+    title(sub="(to check predictive power)", line=2, cex.sub=0.7)
+    abline(0,1)
+    par(mfrow=c(1,1))
+    title(deparse(substitute(x)), outer=TRUE)
+		mtext(paste("% Cumulative", deparse(substitute(y)), "values"), side=2, line=2, adj=0, cex=0.9)	# adj=0 means left alignment
   }
 
   return(invisible(toplot))
