@@ -766,8 +766,15 @@ plot.binned = function(
 		# within a pairs() call the same axis scales are expected to be shown for ALL panels, unless missing values vary across variables.
   type2="b", pch2=21,	  # type and pch par() options defining the form and symbol of the target variable
   xaxt="s", yaxt="s",
-	addXAxis=(xlim!="orig"), addYAxis=(ylim!="orig"), # addXAxis, addYAxis: Whether to manually add the x/y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
-  addY2Axis=(ylim2!="orig"), # addY2Axis: whether to manually add the secondary y-axis ticks next to EACH axis, because the axis on the different pair combinations may be potentially different (this is set to TRUE when the secondary axis limits are NOT requested to be in the original coordinates --in which case the secondary y-axis have the same range for all pairs plots)
+	addXAxis=FALSE, addYAxis=(ylim=="new" || ylimProperty=="new"), addY2Axis=(ylim2=="new" || ylim2Property=="new"),
+		# addXAxis, addYAxis, addY2Axis: Whether to force showing the x/y/y2-axis tick marks next to EACH axis in a pairs plot.
+		# Note that these parameters are ONLY used when plot.binned() is called as a panel function of a pairs plot.
+		# This is important when plot.binned() is called from within a pairs plot, particularly for the y-axes. In fact the vertical axes on the different pair
+		# combinations may be potentially different because of the grouping done on the x variable, and we may want to know what the actual vertical axes values are.
+		# These parameters were added because it was not possible to check the value of graphical parameter 'yaxt' (which defines whether the y axes are shown)
+		# from within a function called as a pairs() panel function because its value is always returned as NULL... this means that I cannot decide whether
+		# to force showing the axis by first checking whether the axis tick marks have already been placed by the pairs() function.
+   # addY2Axis: whether to force showing the secondary y-axis tick marks next to EACH axis, because the axis on the different pair combinations may be potentially different (this is set to TRUE when the secondary axis limits are NOT requested to be in the original coordinates --in which case the secondary y-axis have the same range for all pairs plots)
 	title=NULL,
 	clip="figure",				# clipping area, either "figure" or "region". This parameter affects the xpd option of par(). Note that "region" is the default in par() but here I set "figure" to the default so that big bubbles are shown full --instead of being partially hidden by the axes.
 	plot=TRUE, print=TRUE, ...)
@@ -1181,7 +1188,7 @@ plot.binned = function(
 
 # Pairs plot of a set of variables where customized information is shown on the lower, diagonal and upper panels
 # CHECK ALSO the car package (companion to applied regression) for interesting functions to enhance plots commonly used for regression)
-pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.panel=points, addXAxis=FALSE, addYAxis=FALSE, max.panels=6, pause=TRUE, target=NULL, ...)
+pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.panel=points, max.panels=6, pause=TRUE, target=NULL, ...)
 # Created:      2013/07/08
 # Modified:     2013/07/08
 # Description:  A manual pairs plot is produced. The plot is manual in that no call to the pairs() function is done but rather
@@ -1195,8 +1202,6 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 #               - Lower diagonal: correlation values produced by panel.cor() function defined above or the 2D kernel density estimation shown as image intensities
 # Parameters:  
 #               x:        	Matrix or data frame whose columns are used to produce the pairs plot
-#               addXAxis:	  Whether to manually add the x-axis ticks (this was invented because the value of par("xaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
-#               addYAxis: 	Whether to manually add the y-axis ticks (this was invented because the value of par("yaxt") is NULL when checking its value from within a function called as a pairs() panel function; this means that I cannot decide whether to manually add the axis checking whether the axis ticks have already been placed by the pairs() function)
 #								max.panels: Max number of panels to show per pairs plot. Several pairs plot are constructed when the number of variables in x is larger than max.panels.
 #								target:			Name of the variable in x containing a target variable of interest. In this case the target variable is shown at the first row of the panel on EVERY pairs plot generated (when max.panels < number of columns in x)
 #
@@ -1241,11 +1246,11 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
   ### Set parameters not passed by the user to the custom value I want to use here.
   # Note that I need to check if they were not passed by the user before assigning the custom value
   # because I don't want to override the user's specification!
-  # Note also that NOT all parameters defined by the function are included in the parameter list
-  # returned by match.call() because match.call() only includes parameters explicitly passed by the user!
+  # *** Note also that NOT all parameters defined by the function are included in the parameter list 				 	***
+  # *** returned by match.call() because match.call() only includes parameters explicitly passed by the user! ***
   if (is.null(paramsList$lower.panel)) paramsList$lower.panel = plot.image
   if (is.null(paramsList$diag.panel))  paramsList$diag.panel  = panel.dist
-  ## Note that I do not assign a value to paramsList$upper.panel because there is no default custom value assigned to it.
+  ## Note that I do not assign a value to paramsList$upper.panel because the default custom value assigned to it is the pairs() default, i.e. "points".
   if (is.null(paramsList$gap)) paramsList$gap = 0       # pairs() parameter specifying the distance between panel plots in margin lines
   if (is.null(paramsList$new)) paramsList$new = FALSE
   if (is.null(paramsList$oma)) paramsList$oma = c(2,3,2,3)
@@ -1266,7 +1271,11 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 		## print(as.list(deparse(substitute(paramsList$upper.panel))))
 		if (is.null(paramsList$cex)) paramsList$cex = 1/(max.panels^(1/3))
 	 	if (is.null(paramsList$inches)) paramsList$inches = 0.5/(max.panels^(1/3))
-  }
+	 	if (is.null(paramsList$print)) paramsList$print = FALSE	# Do not show the plotted data of each pairs plot!
+		if (is.null(paramsList$addXAxis)) paramsList$addXAxis = FALSE
+		if (is.null(paramsList$addYAxis)) paramsList$addYAxis = FALSE
+		if (is.null(paramsList$addY2Axis)) paramsList$addY2Axis = FALSE
+}
 
 	### Target variable
 	# If a target parameter is passed, place it as first column of x so that it is plotted at the first row of the pairs plot 
@@ -1324,7 +1333,7 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 			}			
 		  # Call the pairs() function
 		  do.call("pairs", paramsList)
-		  if (pause & i <= imax) {
+		  if (pause & plotnum < nplots) {
 		  	cat("Press ENTER for next plot:")
 		  	readline()
 		  }

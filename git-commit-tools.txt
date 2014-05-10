@@ -50,3 +50,15 @@ startup-functions.r:
 	- cumplot(): Plot of cumulative y vs. cumulative x. Target y can be continuous or binary 0/1.
 - Updated functions:
 	- In all functions where it was reasonable (basically functions that optionally generate plots), return() statements were replaced with return(invisible()) so that nothing is shown to the user when the return value is not assigned to a variable.
+
+commit of Tools: 2014/05/05 - 2014/05/10 [COMMITTED]
+----------------------------------------
+Fixed axis issues in pairs.custom() function
+
+startup-function.r:
+- Updated functions:
+	- pairs.custom():
+		- removed parameters addXAxis, addYAxis from the function signature because they are only relevant when one of the panel functions is plot.binned(). These parameters are still set (to FALSE) when plot.binned() is called as one of the panel functions.
+		- fixed the problem of asking for NEXT PLOT when the last panel of plots has been displayed.
+	- plot.binned():
+		- fixed the default parameter value of: addXAxis (to FALSE), addYAxis (to ylim or ylimProperty == "new"), addY2Axis (ditto), so that now, in a pairs plot, y vertical axes are not shown by default unless their axis limits are set to be the "new" ones (after grouping of the x variable). Recall that these parameters only take effect when the plot.binned() function is called from within a pairs plot. Even though I have set these parameters to FALSE within the pairs.custom() function (when the plot.binned() function has been set as a panel function), I still leave this default behaviour in plot.binned() in case I want to change how these parameters are set in pairs.custom() by default in the future.
