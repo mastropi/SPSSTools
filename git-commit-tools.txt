@@ -62,3 +62,19 @@ startup-function.r:
 		- fixed the problem of asking for NEXT PLOT when the last panel of plots has been displayed.
 	- plot.binned():
 		- fixed the default parameter value of: addXAxis (to FALSE), addYAxis (to ylim or ylimProperty == "new"), addY2Axis (ditto), so that now, in a pairs plot, y vertical axes are not shown by default unless their axis limits are set to be the "new" ones (after grouping of the x variable). Recall that these parameters only take effect when the plot.binned() function is called from within a pairs plot. Even though I have set these parameters to FALSE within the pairs.custom() function (when the plot.binned() function has been set as a panel function), I still leave this default behaviour in plot.binned() in case I want to change how these parameters are set in pairs.custom() by default in the future.
+
+commit of Tools: 2014/05/10 - 2014/05/11 [COMMITTED]
+----------------------------------------
+New function plot.outliers2d() and enhanced ModelFit()
+
+startup-function.r:
+- New functions:
+	- plot.outliers2d(), panel.outliers2d(): plot 2D outliers based on estimated multivariate gaussian density (Ref: Machine Learning course)
+- Updated functions:
+	- plot.binned():
+ 		- added logical parameter 'limits' which indicates whether to show the x limits of each bin as vertical gray lines.
+		- changed the default value of parameter 'clip' from "figure" to "region" and at the same time I now set par(xpd=TRUE) before showing any text on the graph (such as point labels) so that all text is fully seen.
+
+datamining-function.r:
+- Updated functions:
+	- ModelFit(), model.fit(): implemented a flexible call to plot.binned() using formals() (to get the parameters present at the signature of the function) and match.call() to get the parameters passed by the user. This is important because I can now use this implementation to better understand the meaning and use of quote() and substitute(). See also the notes in 'R Help.txt' about this matter.

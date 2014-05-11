@@ -1,6 +1,6 @@
 # startup-functions.r
 # Created:      July 2008
-# Modified:     28-Mar-2013
+# Modified:     11-May-2014
 # Author:       Daniel Mastropietro
 # Description: 	Startup settings to be invoked when R starts
 # R version:    R-2.8.0 (used in SPSS 18.0.0 @NAT starting 2013)
@@ -12,9 +12,7 @@
 # - DATA ANALYSIS functions
 # - GRAPHICAL functions
 
-# HISTORY:
-# - 2013/09/03: Took care of missing values in functions:
-#               plot.binned(), pairs.custom()
+# HISTORY: (keep track of created functions, but no updates. For updates see the Git history)
 # - 2013/09/19: Created function safeLog(x) to compute sign(x)*log10(constant + abs(x))
 # - 2013/12/23: Created function getAxisLimits() to retrieve the correct X and Y limits of the active plot, since
 # 							the values returned by par("usr") are NOT correct for the plots done by default, which use xaxs="r"
@@ -31,6 +29,9 @@
 # - 2014/05/07: Created function cumplot() used to plot cumulative y vs. cumulative x.
 #								It can be used for continuous model fit analysis for the predicted value and by input variable
 #								A binary 0/1 target variable is allowed.
+# - 2014/05/11: Created functions:
+#								- plot.outliers2d(), panel.outliers2d(): plot 2D outliers based on estimated multivariate gaussian density (Ref: Machine Learning course)
+#								- ellipse(), ellipsem(), angle() (taken from the internet and used by plot.outliers2d()
 #
 
 # TODO:
@@ -44,120 +45,10 @@ require(grDevices)# For colorRampPalette() (used in biplot.custom)
 require(MASS)     # For kde2d() etc. (used at least in pairs.custom)
 
 
-########################################## FUNCTIONS TO ADD ###################################
-plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=0.01, add=TRUE, plot.kde=FALSE, plot.id=TRUE, lwd=1, col.outlier="red", cex=0.6, pos=3, srt=0, ...)
-# Created: 20-Apr-2014
-# Author: Daniel Mastropietro
-# Parameters:   cutoff: when (estimated gaussian density) / max(estimated gaussian density) < cutoff => flag the point as outlier
-#								srt: degrees of rotation for the text shown by text() (e.g. srt=90). This is a par() option that applies only to text.
-{
-  ### Data prep
-  # Remove missing values in data
-  if (is.null(y)) {
-    varnames = colnames(x)
-    y = x[,2]
-    x = x[,1]
-  } else {
-    varnames = c(deparse(substitute(x)), deparse(substitute(y)))
-  }
-  indok = !is.na(x) & !is.na(y)
-  # Store the data good for analyzing
-  xy = cbind(x[indok],y[indok])
-  # Name the rows using the id variable
-  if (!is.null(id)) rownames(xy) = id[indok]
-  
-  # Plot
-  if (add) {
-    points(xy, ...)
-  } else {
-    plot(xy, ...)
-  }
-  #  do.call(plot.fun, list(xy, ...))     # This does NOT work!! it generates a plot showing all the values to be plotted and it's a mess!!!!
-  centroid = apply(xy, 2, FUN=center)
-  SIGMA = do.call(scale, list(xy))
-  # Assume multivariate normality to compute density function to compare with cutoff value
-  # I could Use the mahalanobis() function which already returns the square of the mahalanobis distance
-  # but here I do it myself to show how to avoid computing non-relevant innter products in the computation of such distance!
-  # (taken from mahalanobis() code)
-  xyc = sweep(xy, 2, centroid)  # The sweep operator takes care of doing the right operation along the different rows of xy (this is equivalent to the more cumbersome t(t(xy) - centroid)
-  maha2 = rowSums((xyc %*% solve(SIGMA)) * xyc) # VERY SMART CALCULATION!
-  gaussian.density = exp(-0.5*maha2) / (2*pi*sqrt(det(SIGMA)))
-  names(gaussian.density) = rownames(xy)
-  
-  # Plot the estimated density surface
-  #   redblue.palette = colorRampPalette(c("red", "blue"))
-  #   ncol = 50
-  #   colors = redblue.palette(ncol)
-  #   denscol = cut(dens2, quantile(dens2, probs=seq(0,1,1/ncol)))
-  #   persp(gx, gy, dens2, col=colors[denscol], ticktype="detailed", theta=40, phi=20)
-  
-  ### 2D density estimation
-  if (plot.kde) {
-    xy.kde = kde2d(xy[,1], xy[,2])
-    contour(xy.kde$x, xy.kde$y, xy.kde$z, col="green", nlevels=5, add=TRUE, lwd=lwd)
-  }
-  
-  ### Compute the normal density in order to generate a contour plot (ellipses)
-  # Generate the grid
-  xrange = range(x)
-  yrange = range(y)
-  gx = seq.int(xrange[1], xrange[2], length.out=25)
-  gy = seq.int(yrange[1], yrange[2], length.out=25)
-  # Create all possible combinations of gx and gy where the normal density should be computed
-  xgrid = rep(gx, length(gy))
-  ygrid = sort(rep(gy, length(gx)))
-  xygrid = cbind(xgrid, ygrid)
-  dens2 = exp(-0.5*mahalanobis(xygrid, centroid, SIGMA)) / sqrt(2*pi*det(SIGMA))
-  # Convert dens2 to a matrix of size (length(xgrid) * length(ygrid))
-  dens2 = matrix(dens2, nrow=length(gx), ncol=length(gy))
-  contour(gx, gy, dens2, nlevels=5, add=TRUE, lwd=lwd, col="blue")
-  points(centroid[1], centroid[2], pch="x", lwd=lwd, cex=2, col="blue")
-  
-  # Using the ellipse() function...
-  gaussian.cutoff = cutoff*max(gaussian.density)
-  #  print(quantile(gaussian.density, probs=seq(0,1,1/100)))
-  cat("Max of estimated gaussian density:", formatC(max(gaussian.density), format="e", digits=4), "\n")
-  cat("Cut off value ( based on cutoff level", cutoff, "):", formatC(gaussian.cutoff, format="e", digits=4), "\n")
-  cat("Min of estimated gaussian density:", formatC(min(gaussian.density), format="e", digits=4), "\n")
-  maha2.cutoff = -2 * log(2*pi*sqrt(det(SIGMA)) * gaussian.cutoff)
-  try( ellipsem(centroid, solve(SIGMA), maha2.cutoff , col=col.outlier, lwd=lwd) )
-  
-  # Show the cutoff ellipse
-  # NOTE: the above call to ellipse() is more reliable in terms of showing the actual cutoff
-  #  contour(gx, gy, dens2, levels=cutoff*max(gaussian.value), add=TRUE, lwd=lwd, col="red")
-  
-  outliers = which(gaussian.density < gaussian.cutoff)
-  if (length(outliers) > 0) {
-    cat("Number of outliers detected for variables", varnames, ":", length(outliers), "(", formatC(length(outliers) / nrow(xy) * 100, format="g", digits=1), "%)\n")
-    points(xy[outliers,], pch=21, bg=col.outlier, col=col.outlier)
-    if (plot.id) {
-      op = par(xpd=TRUE)
-      text(xy[outliers,], labels=rownames(xy)[outliers], offset=0.5, pos=pos, srt=srt, cex=cex)
-      par(xpd=op$xpd)
-    }
-  } else {
-    cat("Number of outliers detected for variables", varnames, ":", length(outliers), "(", formatC(length(outliers) / nrow(xy) * 100, format="g", digits=1), "%)\n")
-    cat("No outliers detected.\n")
-  }
-  
-  return(invisible(outliers))
-}
 
-# Trying to generate the equivalent panel function (with add=TRUE always) but it does not work.
-# I get the error "y is missing" at the do.call(plot,...) ... WHY??
-panel.outliers2d = function(x, y, id=NULL, center=median, scale=cov, cutoff=0.01, plot.kde=FALSE, plot.id=TRUE, lwd=1, cex=0.6, pos=3, srt=0, ...)
-{
-  ### Parse the function call
-  call = match.call()
-  # Put all calling parameters into a parameter list
-  paramsList = as.list(call)
-  # Remove the function name from the parameter list
-  paramsList[[1]] = NULL
-  # Set the add parameter to TRUE
-  paramsList$add = TRUE
-  print(paramsList)
-  do.call("plot.outliers2d", paramsList)
-}
+########################################## FUNCTIONS TO ADD ###################################
+# PUT HERE ANY FUNCTIONS THAT ARE UNDER DEVELOPMENT AND WERE NOT YET TESTED SO THAT I REMEMBER THAT IT WOULD BE GOOD TO ADD THEM.
+
 ########################################## FUNCTIONS TO ADD ###################################
 
 
@@ -425,11 +316,13 @@ logitInv = function(x, adjust=0)
 # plot.hist
 # plot.image
 # plot.log
+# plot.outliers2d	(NEW May-2014)
 
 # PANEL FUNCTIONS (functions that only make sense when ADDED to a panel --such as the panels on a pairs plot)
 # panel.cor
 # panel.dist
 # panel.hist
+# panel.outliers2d	(NEW May-2014)
 # 
 
 # 2013/09/21
@@ -460,13 +353,19 @@ plot.dist = function(dat, plot.fun=plot, respect=FALSE, histogram=FALSE, xlim=NU
   x1 = dat[,1]
   x2 = dat[,2]
   # Add this variables to the parameter list to pass to the plot.fun function
-  paramsList$x = x1
-  paramsList$y = x2
+  paramsList$x = quote(x1)
+  paramsList$y = quote(x2)
+  paramsList$plot.fun = NULL
+  paramsList$respect = NULL
+  paramsList$histogram = NULL
   print(paramsList)
   ### Main plot
   # Still cannot make the do.call() work. The problem I have is that instead of points, the plot is filled with the data values!! (strange)
-#  do.call(deparse(substitute(plot.fun)), paramsList)
-  plot(x1, x2, xlim=xlim, ylim=ylim, ...)
+  # (2014/05/12) SOLVED! The reason that this was happening is that prior to the do.call() execution, all parameters are EVALUATED! Therefore
+  # when the plot() function runs deparse(substitute()) to show the labels for the x and y axes, the actual values being plotted are shown
+  # instead of the variable names!!
+  do.call(deparse(substitute(plot.fun)), paramsList)
+#  plot(x1, x2, xlim=xlim, ylim=ylim, ...)	# This is no longer needed if the above do.call() works... I still leave it in case there is a problem with the above
   
   ### Distribution of x1
   par(mar=c(0,3,0,0), pty="m")
@@ -757,7 +656,8 @@ plot.binned = function(
   lm=TRUE, loess=TRUE,
   circles=NULL, thermometers=NULL,  # 'circles' and 'thermometers' must be EXPRESSIONS that parameterize the corresponding symbol based on the computed grouped values (e.g. circles=expression(x_n) or thermometers=expression(cbind(x_n,y_n,target_center)), since these values would not exist during the function call)
   col="light blue", col.pred="black", col.target="red", col.lm="blue", col.loess="green",
-	pointlabels=TRUE, bands=FALSE, width=1, stdCenter=TRUE, # stdCenter: whether to show the bands using the standard deviation of the *summarized* y value (calculated as scale/sqrt(n), where n is the number of cases in the x category), instead of showing the standard deviation of the y value, i.e. +/- 'scale'.
+	pointlabels=TRUE, limits=FALSE,		# 'limits' indicates whether to show the x limits of each bin as vertical gray lines (so that we know from where to where each points spans in terms of the x values in the bin)
+	bands=FALSE, width=1, stdCenter=TRUE, # stdCenter: whether to show the bands using the standard deviation of the *summarized* y value (calculated as scale/sqrt(n), where n is the number of cases in the x category), instead of showing the standard deviation of the y value, i.e. +/- 'scale'.
   boxplots=FALSE, add=FALSE, offset=1, inches=0.5, size.min=0.05, cex.label=1,
 	xlab=NULL, ylab=NULL, xlim=NULL, ylim=NULL, ylim2=NULL,  # ylim for the secondary axis used to plot the target values
 	xlimProperty=xlim, ylimProperty=ylim, ylim2Property=ylim,
@@ -776,7 +676,7 @@ plot.binned = function(
 		# to force showing the axis by first checking whether the axis tick marks have already been placed by the pairs() function.
    # addY2Axis: whether to force showing the secondary y-axis tick marks next to EACH axis, because the axis on the different pair combinations may be potentially different (this is set to TRUE when the secondary axis limits are NOT requested to be in the original coordinates --in which case the secondary y-axis have the same range for all pairs plots)
 	title=NULL,
-	clip="figure",				# clipping area, either "figure" or "region". This parameter affects the xpd option of par(). Note that "region" is the default in par() but here I set "figure" to the default so that big bubbles are shown full --instead of being partially hidden by the axes.
+	clip="region",				# clipping area, either "figure" or "region". This parameter affects the xpd option of par(). Note that "region" is the default in par() but here I set "figure" to the default so that big bubbles are shown full --instead of being partially hidden by the axes.
 	plot=TRUE, print=TRUE, ...)
 # Created: 			09-Sep-2008
 # Modified: 		11-Mar-2014
@@ -821,6 +721,8 @@ plot.binned = function(
 #						(2014/03/31) Fixed errors occurring with target variable, when: target variable has missing values (NA) and error message showing up when target=NULL was explictly passed (this was solved by replaing condition "!missing(target)" with "!is.null(target)")
 #												 Simplified the specification of the axis formats by removing parameters xlimProperty, ylimProperty, ylim2Property. Now the "new" or "orig" specifications should be directly passed to xlim, ylim, ylim2.
 #												 Updated ylim range when pred variable is passed and ylim="new".
+#						(2014/05/11) Added logical parameter 'limits' which indicates whether to show the x limits of each bin as vertical gray lines.
+#												 Changed the default value of 'clip' from "figure" to "region" and at the same time forced the use of par(xpd=TRUE) before showing the point labels.
 {
   #----------------------------------- Parse input parameters ---------------------------------#
   ### Check whether this function is called by pairs, in order to set parameter add=TRUE, so a new plot is NOT created (which gives an error in pairs())
@@ -926,14 +828,23 @@ plot.binned = function(
 
   # Aggregated values using 'center' as the function to compute such value (e.g. center=mean)
   # Min and Max values are also computed for x and y, as well as the scale, using 'scale' as the function to compute the scale (e.g. scale=sd)
+  # Note that the column names of each aggregate() function coincide with the the original variable names... (e.g. x, y, target, pred)
+  # Note also that I use the trick of always using "" as second value of parameter 'suffixes' except at the very last merge() which allows
+  # me to have all variable names in 'toplot' as I finally need them!
 	dat_center = aggregate(dat, by=list(x_cat), FUN=center, na.rm=TRUE)
+	dat_min = aggregate(dat, by=list(x_cat), FUN=min, na.rm=TRUE)
+	dat_max = aggregate(dat, by=list(x_cat), FUN=max, na.rm=TRUE)
 	dat_scale = aggregate(dat, by=list(x_cat), FUN=scale, na.rm=TRUE)
 	dat_n = aggregate(dat, by=list(x_cat), length)
-	toplot = merge(dat_center, dat_scale, by="Group.1", suffixes=c("_center","_scale"))
-	toplot = merge(toplot, dat_n, by="Group.1", suffixes=c("","_n"))
-	toplot = rename.vars(toplot, from=c("Group.1", "x", "y"), to=c("x_cat", "x_n", "y_n"), info=FALSE)
-	if (!is.null(pred)) { toplot = rename.vars(toplot, from=c("pred"), to=c("pred_n"), info=FALSE) }
-	if (!is.null(target)) { toplot = rename.vars(toplot, from=c("target"), to=c("target_n"), info=FALSE) }
+	toplot = merge(dat_center, dat_min, by="Group.1", suffixes=c("_center",""))
+	toplot = merge(toplot, dat_max, by="Group.1", suffixes=c("_min",""))
+	toplot = merge(toplot, dat_scale, by="Group.1", suffixes=c("_max",""))
+	toplot = merge(toplot, dat_n, by="Group.1", suffixes=c("_scale","_n"))
+	# 2014/05/11: This is no longer needed as I automatically name correctly all the columns in toplot by using the trick shown above
+	# of always using "" as the second value of 'suffixes' except at the very last step!
+#	toplot = rename.vars(toplot, from=c("Group.1", "x", "y"), to=c("x_cat", "x_n", "y_n"), info=FALSE)
+#	if (!is.null(pred)) { toplot = rename.vars(toplot, from=c("pred"), to=c("pred_n"), info=FALSE) }
+#	if (!is.null(target)) { toplot = rename.vars(toplot, from=c("target"), to=c("target_n"), info=FALSE) }
 	# 2013/12/31: New way but this does NOT work when pred and target are NOT empty because pred_center and target_center are not found.
 	# The aggregate with FUN=center should be the first to be computed!
 #	dat_min = aggregate(dat, by=list(x_cat), FUN=min, na.rm=TRUE); dat_min = rename.vars(dat_min, from=c("x", "y"), to=c("x_min", "y_min"), info=FALSE);
@@ -1103,6 +1014,11 @@ plot.binned = function(
         axis(at=pretty(c(ylim,y_center)), side=axisProperty$side, outer=axisProperty$outer, line=axisProperty$line)
       }
     }
+    # Add x limits for each bin if requested
+    if (limits) {
+    	abline(v=x_min, col="gray", lty=2)
+    }
+    
     if (lm & !inherits(lm, "try-error")) { lines(x_center, lmfit$fitted, col=col.lm,  lwd=2, lty=2) }
     if (loess & !inherits(loessfit, "try-error")) { lines(x_center, loessfit$fitted, col=col.loess, lwd=2) }
     
@@ -1130,7 +1046,9 @@ plot.binned = function(
     abline(h=0)
     if (is.null(thermometers) & pointlabels) {
       # Only add labels when thermometers are NOT used as symbols (because they already show the target value as labels)
+			xpd = par(xpd=TRUE)		# Clip the text to the figure instead of to the plotting region so that all point labels are seen.
       text(x_center, y_center, x_n, pos=1, offset=offset, cex=cex.label*log10(1 + x_n/10), col="black")
+      par(xpd=xpd)
     }
     title(title)
     
@@ -1217,10 +1135,10 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 #												 This implied the redesign of a large part of the function.
 #
 {
-  # Store the list of explicitly defined parameters in this function
-  # (note that this information is not used but was left here as a reference of how to read the parameters explicitly passed by the user during the function call)
-  funParams = ls(pos=sys.frame(sys.nframe())) # The list of function parameters is returned in alphabetical order
-  
+  # Store the list of parameters explicitly defined in the signature of this function
+  # (note that this information is not used but was left here as a reference of how to parse the parameters explicitly defined in the function signature)
+  funParams = formals(sys.function(sys.parent()))
+
   # Read the function call
   call = match.call()
 #  params = names(call)  # The parameters are listed as follows: first the explictily defined parameter, then the parameters passed in '...'
@@ -1507,6 +1425,194 @@ plot.hist = function(x, y, ...)
 	}
 	# Plot the histogram
 	polygon(tp, ...)
+}
+
+# Auxiliary functions used by plot.outliers2d
+# ellipse() and ellipsem() were taken from: http://ms.mcmaster.ca/peter/s4c03/s4c03_0506/classnotes/DrawingEllipsesinR.pdf
+# The function ellipsem() addsthe ellipse t(x-mu)%*%amat%*%(x-mu) = c2 to the current plot or a new plot; 
+# function ellipse() draws an ellipse given the half-lengths of the axes, the angle of orientation, and the centre; 
+# angle() computes the angle between the X-axis and a vector drawn from the origin to the point (x, y).
+ellipse = function (hlaxa = 1, hlaxb = 1, theta = 0, xc = 0, yc = 0, newplot = F, npoints = 100, ...) 
+{ 
+  a <- seq(0, 2 * pi, length = npoints + 1) 
+  x <- hlaxa * cos(a) 
+  y <- hlaxb * sin(a) 
+  alpha <- angle(x, y) 
+  rad <- sqrt(x^2 + y^2) 
+  xp <- rad * cos(alpha + theta) + xc 
+  yp <- rad * sin(alpha + theta) + yc 
+  if (newplot) 
+    plot(xp, yp, type = "l", ...) 
+  else lines(xp, yp, ...)
+  invisible()
+}
+ellipsem = function (mu, amat, c2, npoints = 100, showcentre = T, ...) 
+{ 
+  if (all(dim(amat) == c(2, 2))) { 
+    eamat <- eigen(amat) 
+    hlen <- sqrt(c2/eamat$val) 
+    theta <- angle(eamat$vec[1, 1], eamat$vec[2, 1]) 
+    ellipse(hlen[1], hlen[2], theta, mu[1], mu[2], npoints = npoints, 
+            ...) 
+    if (showcentre) 
+      points(mu[1], mu[2], pch = 3) 
+  } 
+  invisible() # This allows for an object to be returned when they are assigned but which do not print when they are not assigned
+}
+angle = function (x, y) 
+{ 
+  angle2 <- function(xy) { 
+    x <- xy[1] 
+    y <- xy[2] 
+    if (x > 0) { 
+      atan(y/x) 
+    } 
+    else { 
+      if (x < 0 & y != 0) { 
+        atan(y/x) + sign(y) * pi 
+      } 
+      else { 
+        if (x < 0 & y == 0) { 
+          pi 
+        } 
+        else { 
+          if (y != 0) { 
+            (sign(y) * pi)/2 
+          } 
+          else { 
+            NA 
+          } 
+        } 
+      } 
+    } 
+  } 
+  apply(cbind(x, y), 1, angle2) 
+} 
+
+# Plot 2D outliers based on the estimation of a multivariate gaussian distribution (Ref: Machine Learning course at Coursera)
+plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=0.01, add=FALSE, plot.kde=FALSE, plot.id=TRUE, lwd=1, col.outlier="red", cex=0.6, pos=3, srt=0, ...)
+# Created: 			20-Apr-2014
+# Author: 			Daniel Mastropietro
+# Parameters:   cutoff: when (estimated gaussian density) / max(estimated gaussian density) < cutoff => flag the point as outlier
+#								srt: degrees of rotation for the text shown by text() (e.g. srt=90). This is a par() option that applies only to text information on a plots.
+{
+  ### Data prep
+  # Remove missing values in data
+  if (is.null(y)) {
+    varnames = colnames(x)
+    y = x[,2]
+    x = x[,1]
+  } else {
+    varnames = c(deparse(substitute(x)), deparse(substitute(y)))
+  }
+  indok = !is.na(x) & !is.na(y)
+  # Store the data good for analyzing
+  xy = cbind(x[indok],y[indok])
+  # Name the rows using the id variable
+  if (!is.null(id)) rownames(xy) = id[indok]
+  
+  # Plot
+  if (add) {
+    points(xy, ...)
+  } else {
+    plot(xy, ...)
+  }
+  #  do.call(plot.fun, list(xy, ...))
+  	## This do.call() does NOT work properly!! it generates a plot showing all the values to be plotted and it's a mess!!!!
+  	## (2014/05/11) OK! I found why! The reason is that the plot() function shows deparse(substitute(x)) and deparse(substitute(y)) as labels
+  	## for the x and y axis. In a do.call(), the parameters passed in the parameter list() are EVALUATED, meaning that the parameters x and y
+  	## (or the matrix xy as in this case) contain the VALUES to be plotted, NOT the NAME of the matrix/vectors containing the values to be plotted...
+  	## Therefore, the result of deparse(substitute(x)) will be the plotted values and NOT the variable names.
+  	## This should be solved by replacing xy with substitute(xy). See 'R Help.txt' under entry "PARSE FUNCTION PARAMETERS".
+  
+  # Compute the centroid and the covariance matrix
+  centroid = apply(xy, 2, FUN=center)
+  SIGMA = do.call(scale, list(xy))
+  # Assume multivariate normality to compute density function to compare with cutoff value
+  # I could Use the mahalanobis() function which already returns the square of the mahalanobis distance
+  # but here I do it myself to show how to avoid computing non-relevant innter products in the computation of such distance!
+  # (taken from mahalanobis() code)
+  xyc = sweep(xy, 2, centroid)  # The sweep operator takes care of doing the right operation along the different rows of xy (this is equivalent to the more cumbersome t(t(xy) - centroid)
+  maha2 = rowSums((xyc %*% solve(SIGMA)) * xyc) # VERY SMART CALCULATION!
+  gaussian.density = exp(-0.5*maha2) / (2*pi*sqrt(det(SIGMA)))
+  names(gaussian.density) = rownames(xy)
+  
+  # Plot the estimated density surface
+  #   redblue.palette = colorRampPalette(c("red", "blue"))
+  #   ncol = 50
+  #   colors = redblue.palette(ncol)
+  #   denscol = cut(dens2, quantile(dens2, probs=seq(0,1,1/ncol)))
+  #   persp(gx, gy, dens2, col=colors[denscol], ticktype="detailed", theta=40, phi=20)
+  
+  ### 2D density estimation
+  if (plot.kde) {
+    xy.kde = kde2d(xy[,1], xy[,2])
+    contour(xy.kde$x, xy.kde$y, xy.kde$z, col="green", nlevels=5, add=TRUE, lwd=lwd)
+  }
+  
+  ### Compute the normal density in order to generate a contour plot (ellipses)
+  # Generate the grid
+  xrange = range(x)
+  yrange = range(y)
+  gx = seq.int(xrange[1], xrange[2], length.out=25)
+  gy = seq.int(yrange[1], yrange[2], length.out=25)
+  # Create all possible combinations of gx and gy where the normal density should be computed
+  xgrid = rep(gx, length(gy))
+  ygrid = sort(rep(gy, length(gx)))
+  xygrid = cbind(xgrid, ygrid)
+  dens2 = exp(-0.5*mahalanobis(xygrid, centroid, SIGMA)) / sqrt(2*pi*det(SIGMA))
+  # Convert dens2 to a matrix of size (length(xgrid) * length(ygrid))
+  dens2 = matrix(dens2, nrow=length(gx), ncol=length(gy))
+  contour(gx, gy, dens2, nlevels=5, add=TRUE, lwd=lwd, col="blue")
+  points(centroid[1], centroid[2], pch="x", lwd=lwd, cex=2, col="blue")
+  
+  # Using the ellipse() function...
+  gaussian.cutoff = cutoff*max(gaussian.density)
+  #  print(quantile(gaussian.density, probs=seq(0,1,1/100)))
+  cat("Max of estimated gaussian density:", formatC(max(gaussian.density), format="e", digits=4), "\n")
+  cat("Cut off value ( based on cutoff level", cutoff, "):", formatC(gaussian.cutoff, format="e", digits=4), "\n")
+  cat("Min of estimated gaussian density:", formatC(min(gaussian.density), format="e", digits=4), "\n")
+  maha2.cutoff = -2 * log(2*pi*sqrt(det(SIGMA)) * gaussian.cutoff)
+  try( ellipsem(centroid, solve(SIGMA), maha2.cutoff , col=col.outlier, lwd=lwd) )
+  
+  # Show the cutoff ellipse
+  # NOTE: the above call to ellipse() is more reliable in terms of showing the actual cutoff
+  #  contour(gx, gy, dens2, levels=cutoff*max(gaussian.value), add=TRUE, lwd=lwd, col="red")
+
+  outliers = which(gaussian.density < gaussian.cutoff)
+  if (length(outliers) > 0) {
+    cat("Number of outliers detected for variables", varnames, ":", length(outliers), "(", formatC(length(outliers) / nrow(xy) * 100, format="g", digits=1), "%)\n")
+    points(xy[outliers,], pch=21, bg=col.outlier, col=col.outlier)
+    if (plot.id) {
+      op = par(xpd=TRUE)
+      text(xy[outliers,], labels=rownames(xy)[outliers], offset=0.5, pos=pos, srt=srt, cex=cex)
+      par(xpd=op$xpd)
+    }
+  } else {
+    cat("Number of outliers detected for variables", varnames, ":", length(outliers), "(", formatC(length(outliers) / nrow(xy) * 100, format="g", digits=1), "%)\n")
+    cat("No outliers detected.\n")
+  }
+  
+  return(invisible(outliers))
+}
+
+# Same function as plot.outliers2d but as a panel function (i.e. always uses add=TRUE)
+panel.outliers2d = function(x, y, id=NULL, center=median, scale=cov, cutoff=0.01, plot.kde=FALSE, plot.id=TRUE, lwd=1, cex=0.6, pos=3, srt=0, ...)
+{
+  ### Parse the function call
+  call = match.call()
+  # Put all calling parameters into a parameter list
+  paramsList = as.list(call)
+  # Remove the function name from the parameter list
+  paramsList[[1]] = NULL
+  # Set the add parameter to TRUE
+  paramsList$add = TRUE
+  # Use substitute() for the x and y elements of the list so that the deparse(substitute()) statement applied to x and y inside the plot.outliers2d()
+  # function works correctly by returning the names of variables x and y received by that function.
+  # This solves the error I received initially where the message "y is missing" was issued...
+  paramsList$x = substitute(x)
+  paramsList$y = substitute(y)
+  do.call("plot.outliers2d", paramsList)
 }
 
 # TODO:

@@ -2121,11 +2121,52 @@ ModelFit <- model.fit <- function(dat, target="y", score="p", vars="p", groups=2
 #
 {
 	op = par(mfrow=c(1,2), mar=c(2,2,2,0), no.readonly=TRUE); on.exit(par(op))
-	
+
 	#---------------------------- Parse input parameters -------------------------------
-	# This parsing should allow for both target and score variables that are names or actual numeric variables
+	# This parsing allows that these variables are specified as either names or actual numeric arrays
 	target = parseVariable(dat, target)
 	score = parseVariable(dat, score)
+
+	# Create the function call in order to avoid conflicts between the parameters passed by the user in ... and those
+	# explicitly listed in the function calls to plot.binned() below.
+	# NOTE that this could be solved by simply adding every single parameter passed at the call to plot.binned() below
+	# to the signature of the ModelFit() function above, but I want to keep the function signature as simple as possible.
+	# (1) Read the parameters explicitly defined in the signature of the function
+	funParams = formals(sys.function(sys.parent()))
+
+	# (2) Read the parameters explicitly passed by the user
+  usrParams = as.list(match.call())
+  
+	# Create the final parameter list by sweeping over the parameters of the function signature and checking which of them
+	# were passed by the user.
+	# Create the initial list of parameters by removing the function name from usrParams
+	paramsList = usrParams[-1]
+	for (parm in names(funParams)) {
+		if (parm != "..." & !(parm %in% names(usrParams))) {
+			# Add the default value of parm defined by the function signature
+			paramsList[parm] = funParams[parm]
+		}
+	}
+
+	# (3) Set the values of the final parameters to be passed to plot.binned()
+	# Assign y and pred
+	# NOTE the use of quote() --instead of using nothing or using substitute()-- because 'target' and 'score' are LOCAL variables
+	# (as opposed to variables passed as parameters to the function)
+	paramsList$y = quote(target)
+	paramsList$pred = quote(score)
+	# Remove parameters that are not used in the function call to plot.binned()
+	for (parm in c("dat", "legend", "score", "target", "vars")) paramsList[parm] = NULL
+	
+	# Set default values when not specified by the user
+	if (is.null(paramsList$ylab)) 			paramsList$ylab = "";
+	if (is.null(paramsList$col)) 				paramsList$col = "light blue";
+	if (is.null(paramsList$col.pred)) 	paramsList$col.pred = "red";
+	if (is.null(paramsList$col.lm)) 		paramsList$col.lm = "blue";
+	if (is.null(paramsList$col.loess)) 	paramsList$col.loess = "green";
+	if (is.null(paramsList$print)) 			paramsList$print = FALSE
+	
+	# Store the value of paramsList$print on a local variable 'print' because I need it below
+	print = paramsList$print
 	#---------------------------- Parse input parameters -------------------------------
 
 	# If vars is passed as a string convert it to an array of variable names
@@ -2136,9 +2177,25 @@ ModelFit <- model.fit <- function(dat, target="y", score="p", vars="p", groups=2
 	for (v in vars) {
 		i = i + 1
 		cat("Analyzing variable", i, "of", length(vars), ":", v, "...\n")
-		plot.binned(dat[,v], target, pred=score, groups=groups, title=v, ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=FALSE, ...)
+
+		# LEFT PLOT (y has the ORIGINAL scale of the y variable)
+#		plot.binned(dat[,v], target, pred=score, groups=groups, title=v, ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=print, ...)
+		# Set the parameter list to be used for the function call to plot.binned()
+		paramsList$x = substitute(dat[,v])	# NOTE the use of substitute() in order to pass the variable NAME and NOT its value (this is important to avoid problems when using deparse(substitute(x)) inside the function being called (which assumes that x contains a variable NAME and not its values!!)
+		paramsList$title = v
+		paramsList$xlim = NULL
+		paramsList$ylim = NULL
+		paramsList$print = print
+		do.call("plot.binned", paramsList)
 		if (legend) legend("top", legend=c("observed mean", "predicted mean", "lm fit", "loess fit"), pch=c(21,NA,NA,NA), lty=c(NA,1,2,1), lwd=c(NA,2,2,2), col=c("black", "red", "blue", "green"), pt.bg=c("light blue",NA,NA,NA), pt.cex=c(1.2,NA,NA,NA), cex=0.6)
-		plot.binned(dat[,v], target, pred=score, groups=groups, title=v, xlim="new", ylim="new", ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=FALSE, ...)
+
+		# RIGHT PLOT (y has the NEW scale of the y variable --after binning)
+#		plot.binned(dat[,v], target, pred=score, groups=groups, title=v, xlim="new", ylim="new", ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=print, ...)
+		# Update the parameter list to be used for the function call to plot.binned()
+		paramsList$xlim = "new"
+		paramsList$ylim = "new"
+		paramsList$print = FALSE	# The data were already printed at the previous call to plot.binned() when requested by the user... so do NOT print them again!
+		do.call("plot.binned", paramsList)	
 	}
 	
 	# Restore graphical settings
