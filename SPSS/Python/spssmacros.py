@@ -2,6 +2,31 @@
 Author: Daniel Mastropietro
 IMPORTANT: It is assumed that the output language and the user interface language of SPSS are set to English."""
 
+
+# INDEX (grouped and sorted alphabetically)
+# -----------------------------------------
+# GENERAL
+# RemoveNamesFromList
+#
+# DATA TRANSFORMATION
+# TransformIndicator
+# TransformLog
+# TransformPercent
+# TrimVariables
+# 
+# EDA
+# MissingValues
+# Summary
+# PlotTargetVSCat
+#
+# MODELING
+# ModelCollin
+# PartialPlots
+#
+# SCORE
+# Score
+#
+
 # HISTORY:
 # 2013/06/14: Replaced all TABs with spaces, o.w. compilation in SPSS 18.0.0 with Python 2.6 at NAT would not work.
 # 2013/06/17: In Summary() function:
@@ -174,7 +199,7 @@ __all__ = [ "RemoveNamesFromList",
 #error = errCode()
 
 
-############################### String manipulation functions #################################
+#################################### RemoveNamesFromList ######################################
 # 2009/01/28
 # HISTORY:  (2011/05/06)
 #           - Renamed the function from RemoveNameFromList to RemoveNamesFromList.
@@ -317,7 +342,7 @@ def RemoveNamesFromList(list=(), names=(), casesensitive=True, outcase=None, out
         list0 = spssaux._buildvarlist(list)
 
     return list0
-############################### String manipulation functions #################################
+#################################### RemoveNamesFromList ######################################
 
 
 

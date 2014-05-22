@@ -1,6 +1,6 @@
 # datamining-functions.r
 # Created: 		  03-Jul-2013
-# Modified: 	  15-Apr-2014
+# Modified: 	  22-May-2014
 # Author: 		  Daniel Mastropietro
 # Description: 	Set of Data Mining functions
 # Dependencies: startup-functions.r, from which the following functions are used:
@@ -16,6 +16,7 @@
 # ScoreDistribution
 # PrecisionRecall, F1
 # ModelFit, model.fit
+# roc
 
 # HISTORY:
 # - 2014/03/26: Created functions:
@@ -32,7 +33,11 @@
 # - 2014/05/05: Updated function PrecisionRecall(), F1():
 #								- Extended the computation of precision and recall to a vector of cutoff values.
 #								- Added a plot= option to show a plot of Recall vs. Precision.
+# - 2014/05/19: Added function:
+#								- roc(): generates ROC curve and computes AUC and AR/Gini.
+#									The function was originally copied from Antoine Thibaud's roc.1(), to which I added some additional functionality.
 #
+
 
 ######################################## GroupCategories ######################################
 # 2014/03/26
@@ -55,7 +60,7 @@ GroupCategories = function(
 		x,									# Input categorical variable to analyze
 		y,									# Target variable,
 		decreasing=TRUE,		# How the x categories should be sorted for the analysis based on the y values. Either TRUE (by decreasing y), FALSE (by increasing y) or NA (alphabetical order)
-		type="cat",					# Type of categorical variable: "cat" or "cont"
+		type="cat",					# Type of target variable y: "cat" (for categorical) or "cont" (for continuous). This affects the test that is used for significant differences among contiguous x categories.
 		event="1",					# Event of interest of categorical variable y when type="cat"
 		stat="mean",				# Statistics to use for the computation of the representative value of y for each category of x when type != "cat"
 		varname=NULL,				# Name of the analyzed variable (useful when calling this function from within a FOR loop where x is passed as tofit[,v], where e.g. v = "x1"
@@ -536,9 +541,9 @@ GroupCategories = function(
 	subscripts = rownames(xout)
   cat("\nGrouping of variable",  ifelse(!is.null(varname), varname, deparse(substitute(x))), ":\n")
 	for (j in 1:nrow(xout)) {
-		ind = eval(parse(text=paste0("c(", subscripts[j], ")")))
+		ind = eval(parse(text=paste("c(", subscripts[j], ")", sep="")))
 		# Categories in the current group
-		xvalues = paste0("'", paste(rownames(bars)[ind], collapse="', '"), "'")
+		xvalues = paste("'", paste(rownames(bars)[ind], collapse="', '"), "'", sep="")
 			## Note that the first and last double quotes are NOT part of xvalues, they are shown because 'xvalues' is of type 'character'.
 		# Number of cases and representative value of the y variable for each group (to print out below)
 		if (type == "cat") {
@@ -2297,3 +2302,107 @@ PrecisionRecall <- F1 <- function(
 	return(list(cuts=cuts, precision=precision, recall=recall, F1=F1))
 }
 ############################################## F1 #############################################
+
+
+
+############################################## roc ############################################
+# 2013/09/19
+# Copied from Antoine Thibaud and changed a little bit, as follows:
+# - renamed 'cant.bines' to 'groups'
+# - added parameter 'lwd' for the line width of the ROC line
+# - added report of AR (Accuracy Ratio) or Gini Index along with the AUC.
+roc <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.type = 1, round.AUC = 2, lwd=1, col=NULL,
+		 												   label=NULL, xlab="Proporcion de buenos identificados", ylab="Proporcion de malos identificados", title="Curva ROC", cex=0.8, cex.main=1)
+  # Genera una curva roc a partir de un df con una columna de clase binaria y otra de probabilidades
+  # Hace un rank de las probabilidades y construye una roc en base al mismo
+  
+  # Mediante el parametro pos, se pueden ir superponiendo hasta 4 curvas roc
+  # Ejemplo de uso:
+  #   roc(clase ~ prob, mod1)
+  #   roc(clase ~ prob, mod2, pos = 2)
+  #   roc(clase ~ prob, mod2, pos = 3)
+  # donde mod1, mod2 y mod3 son dfs con clase y probabilidad predicha...
+{
+  df <- model.frame(formula, data)
+  colnames(df) <- c('clase', 'pm')
+  df$clase <- factor(df$clase)
+  
+  descrip.clase <- unique(df$clase)
+  # Rank de la prob. de 'malo'
+  #   df$grupo <- findInterval(df$pm, 
+  #                            quantile(df$pm, seq(0, 1, len = groups - 1), type = quantile.type),
+  #                            all.inside = TRUE, rightmost.closed = TRUE)
+  ranking <- rank(df$pm,  ties.method = "average")
+  df$grupo <- findInterval(ranking, 
+    quantile(ranking, seq(0, 1, len = groups), type = quantile.type),
+    all.inside = TRUE, rightmost.closed = TRUE)
+  
+  tbl <- as.matrix(table(df$grupo, df$clase), ncol=3)
+  
+  tbl.df <- as.data.frame(cbind(tbl[, 1], tbl[, 2]))
+  colnames(tbl.df) <- dimnames(tbl)[[2]]
+  
+  min.prob <- tapply(df$pm, df$grupo, min, simplify = TRUE)
+  tbl.df <- cbind(tbl.df, min.prob[match(dimnames(min.prob)[[1]], rownames(tbl.df))])
+  colnames(tbl.df)[length(colnames(tbl.df))] <- 'min.prob'
+  
+  max.prob <- tapply(df$pm, df$grupo, max, simplify = TRUE)
+  MAX.max.prob <- max(max.prob)
+  tbl.df <- cbind(tbl.df, max.prob[match(dimnames(max.prob)[[1]], rownames(tbl.df))])
+  colnames(tbl.df)[length(colnames(tbl.df))] <- 'max.prob'
+  
+  tbl.df[order(-as.numeric(rownames(tbl.df))), 'N.acum'] <-
+    cumsum(tbl.df[order(-as.numeric(rownames(tbl.df))), 1])
+  tbl.df[order(-as.numeric(rownames(tbl.df))), 'S.acum'] <-
+    cumsum(tbl.df[order(-as.numeric(rownames(tbl.df))), 2])
+  
+  tbl.df$N.acum2 <- tbl.df$N.acum / sum(tbl.df[[1]])
+  tbl.df$S.acum2 <- tbl.df$S.acum / sum(tbl.df[[2]])
+  
+  # Agrego una ?ltima fila para generar el punto (0, 0)
+  ## Lo hago en dos pasos porque me falla el rbind si los nombres de columnas no son iguales...
+  ult.fila <- data.frame(0, 0, 
+    min.prob = MAX.max.prob, max.prob = 1,
+    N.acum = 0, S.acum = 0, N.acum2 = 0, S.acum2 = 0,
+    row.names = as.vector(as.character(groups)))
+  colnames(ult.fila) <- colnames(tbl.df)
+  tbl.df <- rbind(tbl.df, ult.fila)
+  
+  # Area Under the Curve
+  AUC = -sum((((2 * tbl.df$S.acum2[-1]) - diff(tbl.df$S.acum2)) /2) * diff(tbl.df$N.acum2))
+  # Accuracy Ratio or Gini Index = (2*AUC - 1).
+  # Note that the AUC is already independent of event rate and that is why the event rate is not needed to compute the AR or Gini index.
+  # The Gini index is the ratio of the ABSS and 0.5, where:
+  # ABSS = Area Between the...
+  # 	- Sensitivity curve = "True Positive Rate as a function of decreasing score" = "%Hits of Events as a function of decreasing score"
+  # 	- (1-Specificity) curve = "False positive Rate as a function of decreasing score" = "%Hits of Non-Events as a function of decreasing score"
+  # and 0.5 = the maximum possible ABSS area (i.e. the area between the OPTIMUM Sensitivity and (1-Specificity) curves).
+  # For more info, see my notes on the Nemo notebook started at Meridian in Mexico.
+  AR = 2*AUC - 1
+  if (is.null(col)) {
+  	color = switch(pos, 'blue', 'green', 'red', 'black', 'purple', 'yellow')
+  } else {
+    color = col
+  }
+  
+  if (pos == 1) {
+    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color,
+      xlim = c(0, 1), ylim = c(0, 1),
+      xlab = xlab, ylab = ylab,
+      main = title, cex.main=cex.main, lwd=lwd)
+    lines(c(0, 1), c(0, 1), col = 'red', lty = 3)
+  } else{
+    par(new=TRUE)
+    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color, 
+      xlim = c(0, 1), ylim = c(0, 1), lwd=lwd,
+      ann = FALSE, axes = FALSE)
+  }
+  if (is.null(label)) label = deparse(substitute(data))
+
+  text(0.6, cex * pos / 7, paste(label, ':\nAUC=', formatC(AUC, format='g', round.AUC), ', AR/Gini=', formatC(AR, format='g', round.AUC), sep=""), cex = cex, col = color)
+
+	if (print) print(tbl.df)
+
+  return(invisible(list(data=tbl.df, AUC=AUC, AR=AR)))
+}
+############################################## roc ############################################

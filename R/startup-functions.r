@@ -1,6 +1,6 @@
 # startup-functions.r
 # Created:      July 2008
-# Modified:     11-May-2014
+# Modified:     19-May-2014
 # Author:       Daniel Mastropietro
 # Description: 	Startup settings to be invoked when R starts
 # R version:    R-2.8.0 (used in SPSS 18.0.0 @NAT starting 2013)
@@ -8,9 +8,9 @@
 
 
 # INDEX
-# - GENERAL functions
-# - DATA ANALYSIS functions
-# - GRAPHICAL functions
+# AUXILIARY functions
+# DATA TRANSFORMATION functions
+# GRAPHICAL functions
 
 # HISTORY: (keep track of created functions, but no updates. For updates see the Git history)
 # - 2013/09/19: Created function safeLog(x) to compute sign(x)*log10(constant + abs(x))
@@ -49,15 +49,27 @@ require(MASS)     # For kde2d() etc. (used at least in pairs.custom)
 ########################################## FUNCTIONS TO ADD ###################################
 # PUT HERE ANY FUNCTIONS THAT ARE UNDER DEVELOPMENT AND WERE NOT YET TESTED SO THAT I REMEMBER THAT IT WOULD BE GOOD TO ADD THEM.
 
+# Smoohting spline fit by a grouping variable
+panel.smooth <- function(x, y, group, ...)
+# Created: 2009/02/02
+# Modified: 2009/02/02
+{
+
+
+}
 ########################################## FUNCTIONS TO ADD ###################################
 
 
-######################################### GENERAL functions ###################################
-# INDEX (sorted alphabetically)
+####################################### AUXILIARY functions ###################################
+# INDEX (sorted in the order they are defined)
 # getAxisLimits
+# pairsXAxisPosition
+# pairsYAxisPosition
 # checkVariables
+# parseVariable
 # who
 # whos
+# ellipse, ellipsem, angle (auxiliary functions for plot.outliers2d)
 
 # Get the axis limits of the current plot
 getAxisLimits = function(ext=0.04)
@@ -100,6 +112,65 @@ getAxisLimits = function(ext=0.04)
 	return(c(xlim, ylim))
 }
 
+# Define the position of the x-axis in a pairs plot
+pairsXAxisPosition = function(xaxt="s")
+# Created: 2013/09/16
+# Modified: 2013/09/16
+# Description: Defines the position in a pairs panel to place the x-axis ticks using the same logic as pairs()
+{
+  mfg = par("mfg")  # 4-element array with the following info: current panel position, panel structure (e.g. (2,3,4,4))
+
+  # X-axis
+  if (xaxt == "n") {
+    # Place the axis ticks next to the axis when no axis ticks have been required at the pairs() call
+    outer = FALSE
+    line = 0
+    side = 1
+  } else {
+    # Place the axis ticks on the outer panel side o.w.
+    # The side is chosen based on the mfg option value, in order to mimic the same logic as the pairs() function
+    outer = TRUE
+    line = 0  # This number should be -gap, where gap is the space between the subplots in margin lines. However, I don't know yet how to retrieve the value of gap in the current pairs() call!
+    if (mfg[2] %% 2 == 1) {
+      side = 1
+    } else {
+      side = 3
+    }
+  }
+
+  return(list(side=side, outer=outer, line=line))
+}  
+  
+# Define the position of the y-axis in a pairs plot
+pairsYAxisPosition = function(yaxt="s")
+# Created: 2013/09/16
+# Modified: 2013/09/16
+# Description: Defines the position in a pairs panel to place the y-axis ticks using the same logic as pairs()
+{
+  mfg = par("mfg")  # 4-element array with the following info: current panel position, panel structure (e.g. (2,3,4,4))
+  
+  # Y-axis
+  if (yaxt == "n") {
+    # Place the axis ticks next to the axis when no axis ticks have been required at the pairs() call
+    outer = FALSE
+    line = 0
+    side = 2
+  } else {
+    # Place the axis ticks on the outer panel side o.w.
+    # The side is chosen based on the mfg option value, in order to mimic the same logic as the pairs() function
+    outer = TRUE
+    line = 0  # This number should be -gap, where gap is the space between the subplots in margin lines. However, I don't know yet how to retrieve the value of gap in the current pairs() call!
+    if (mfg[1] %% 2 == 1) {
+      side = 4
+    } else {
+      side = 2
+    }
+  }
+  
+  return(list(side=side, outer=outer, line=line))
+}
+
+# Check existence of variables in a data frame
 CheckVariables <- checkVariables <- check.variables <- function(data, vars, print=FALSE)
 # Created: 			05-Aug-2013
 # Modified: 		30-Mar-2014
@@ -140,6 +211,7 @@ CheckVariables <- checkVariables <- check.variables <- function(data, vars, prin
   }
 }
 
+# Parse a variable passed to a function so that either the actual variable or a string representing a data frame's variable name are accepted
 parseVariable <- parse.variable <- function(dat, var)
 # Created: 			30-Mar-2014
 # Modified: 		30-Mar-2014
@@ -160,13 +232,15 @@ parseVariable <- parse.variable <- function(dat, var)
 	return(var)
 }
 
+# List the names of the variables existing in an environment in a matrix-like form
 who = function(envir=.GlobalEnv)
 # Created: 			2008
-# Descriptoin: 	Function that implements the Matlab-like function 'who' listing the objects defined in memory
+# Description: 	Function that implements the Matlab-like function 'who' listing the objects defined in memory
 {
 	print(as.matrix(ls(envir=envir)))
 }
 
+# List the names of the variables existing in an environment and their sizes in a matrix-like form
 whos = function(envir=.GlobalEnv, sortby=c("name","size"), decreasing=FALSE)
 # Created: 			2008
 # Modified: 		09-Sep-2008
@@ -188,11 +262,73 @@ whos = function(envir=.GlobalEnv, sortby=c("name","size"), decreasing=FALSE)
 	
 	print(as.data.frame(size))
 }
-######################################### GENERAL functions ###################################
+
+# Three auxiliary functions used by plot.outliers2d
+# ellipse() and ellipsem() were taken from: http://ms.mcmaster.ca/peter/s4c03/s4c03_0506/classnotes/DrawingEllipsesinR.pdf
+# The function ellipsem() addsthe ellipse t(x-mu)%*%amat%*%(x-mu) = c2 to the current plot or a new plot; 
+# function ellipse() draws an ellipse given the half-lengths of the axes, the angle of orientation, and the centre; 
+# angle() computes the angle between the X-axis and a vector drawn from the origin to the point (x, y).
+ellipse = function (hlaxa = 1, hlaxb = 1, theta = 0, xc = 0, yc = 0, newplot = F, npoints = 100, ...) 
+{ 
+  a <- seq(0, 2 * pi, length = npoints + 1) 
+  x <- hlaxa * cos(a) 
+  y <- hlaxb * sin(a) 
+  alpha <- angle(x, y) 
+  rad <- sqrt(x^2 + y^2) 
+  xp <- rad * cos(alpha + theta) + xc 
+  yp <- rad * sin(alpha + theta) + yc 
+  if (newplot) 
+    plot(xp, yp, type = "l", ...) 
+  else lines(xp, yp, ...)
+  invisible()
+}
+ellipsem = function (mu, amat, c2, npoints = 100, showcentre = T, ...) 
+{ 
+  if (all(dim(amat) == c(2, 2))) { 
+    eamat <- eigen(amat) 
+    hlen <- sqrt(c2/eamat$val) 
+    theta <- angle(eamat$vec[1, 1], eamat$vec[2, 1]) 
+    ellipse(hlen[1], hlen[2], theta, mu[1], mu[2], npoints = npoints, 
+            ...) 
+    if (showcentre) 
+      points(mu[1], mu[2], pch = 3) 
+  } 
+  invisible() # This allows for an object to be returned when they are assigned but which do not print when they are not assigned
+}
+angle = function (x, y) 
+{ 
+  angle2 <- function(xy) { 
+    x <- xy[1] 
+    y <- xy[2] 
+    if (x > 0) { 
+      atan(y/x) 
+    } 
+    else { 
+      if (x < 0 & y != 0) { 
+        atan(y/x) + sign(y) * pi 
+      } 
+      else { 
+        if (x < 0 & y == 0) { 
+          pi 
+        } 
+        else { 
+          if (y != 0) { 
+            (sign(y) * pi)/2 
+          } 
+          else { 
+            NA 
+          } 
+        } 
+      } 
+    } 
+  } 
+  apply(cbind(x, y), 1, angle2) 
+} 
+####################################### AUXILIARY functions ###################################
 
 
 
-###################################### DATA ANALYSIS functions ################################
+################################## DATA TRANSFORMATION functions ##############################
 # INDEX (sorted alphabetically)
 # quantile.weight
 # logitInv
@@ -296,23 +432,21 @@ logitInv = function(x, adjust=0)
 	yadj = (y - adjust)/(1-2*adjust)
 	return(yadj)
 }
-###################################### DATA ANALYSIS functions ################################
+################################## DATA TRANSFORMATION functions ##############################
 
 
 
-######################################### GRAPHICAL functions #################################
+###################################### GRAPHICAL functions ####################################
 # INDEX (sorted alphabetically)
 # cumplot (NEW May-2014)
 # hist.log
 # biplot.custom
 # pairs.custom
-# pairsXAxisPosition
-# pairsYAxisPosition
 # plot.axis
 # plot.bar		(NEW Mar-2014)
 # plot.binned
 # plot.cdf		(NEW Mar-2014)
-# plot.dist (in construction, which calls panel.dist --when finalized should I remove the 'add' parameter form panel.dist() --because this is a panel function)
+# plot.dist
 # plot.hist
 # plot.image
 # plot.log
@@ -326,11 +460,10 @@ logitInv = function(x, adjust=0)
 # 
 
 # 2013/09/21
-# NEW FUNCTION TO CREATE THAT SHOWS A SCATTER PLOT AND HISTOGRAMS, BOXPLOTS AND DENSITY ON EACH SIDE!!
-# This function calls panel.dist()!! (also defined in this file)
-# NOT TESTED YET!!
+# plot.dist: Scatter plot with boxplot and density displayed on the side of each axis
 plot.dist = function(dat, plot.fun=plot, respect=FALSE, histogram=FALSE, xlim=NULL, ylim=NULL, ...)
-  ## respect is the aspect ratio respecting of the layout() function
+# This function uses the layout() function to distribute the differenet plots and calls panel.dist() (defined below)
+# Parameters: respect is the aspect ratio respecting of the layout() function
 {
   ### Parse the function call
   call = match.call()
@@ -348,100 +481,54 @@ plot.dist = function(dat, plot.fun=plot, respect=FALSE, histogram=FALSE, xlim=NU
   # No plot on the upper-right tile
   # This position is defined by the numbers 0, 1, 2, 3, where 0 means NO plot.
   # The widths and heights of each subplot are different, accordingly to what is plotted
-  mar = par(mar=c(3,3,0,0))
+  op = par(mar=c(4,4,0,0), no.readonly=TRUE);
   layout = layout(matrix(c(2,0,1,3), ncol=2, byrow=TRUE), widths=c(4/5,1/5), heights=c(1/5,4/5), respect=respect)
+  on.exit({ par(op); layout(1) })
   x1 = dat[,1]
   x2 = dat[,2]
   # Add this variables to the parameter list to pass to the plot.fun function
+  # Note the use of quote() to avoid having the values plotted shown as labels! (see comment below prior to the do.call() command)
   paramsList$x = quote(x1)
   paramsList$y = quote(x2)
   paramsList$plot.fun = NULL
   paramsList$respect = NULL
   paramsList$histogram = NULL
-  print(paramsList)
+  varnames = colnames(dat)
+  if (!is.null(varnames)) {
+  	paramsList$xlab = varnames[1]
+  	paramsList$ylab = varnames[2]
+  }
+  if (!is.null(xlim)) {
+  	paramsList$xlim = xlim
+  	paramsList$ylim = ylim
+  } else {
+  	# Set the xlim and ylim that are used when generating the distributions of x1 and x2 on the side of the plot
+  	# so that there is alignment with what is plotted in the main plot of x2 vs. x1.
+  	xlim = range(x1)
+  	ylim = range(x2)
+  }
   ### Main plot
   # Still cannot make the do.call() work. The problem I have is that instead of points, the plot is filled with the data values!! (strange)
   # (2014/05/12) SOLVED! The reason that this was happening is that prior to the do.call() execution, all parameters are EVALUATED! Therefore
-  # when the plot() function runs deparse(substitute()) to show the labels for the x and y axes, the actual values being plotted are shown
-  # instead of the variable names!!
+  # when inside the plot() function (for instance) deparse(substitute()) is used to show the labels for the x and y axes, the actual values
+  # being plotted are shown instead of the variable names!!
   do.call(deparse(substitute(plot.fun)), paramsList)
 #  plot(x1, x2, xlim=xlim, ylim=ylim, ...)	# This is no longer needed if the above do.call() works... I still leave it in case there is a problem with the above
-  
+
   ### Distribution of x1
-  par(mar=c(0,3,0,0), pty="m")
+  par(mar=c(0,4,0,0), pty="m")	# The non-zero margin should be the same as the margins defined above (using mar) when doing the main plot of x2 vs. x1
     ## Make the horizontal axis of the distribution stick to the top axis of the scatter plot
     ## Also make the plot region maximal so that the whole subplot is occupied by the distribution
   panel.dist(x1, histogram=histogram, horizontal=TRUE, add=FALSE, main="", axes=FALSE, xlim=xlim, ylim=ylim)
 
   ### Distribution of x2
-  par(mar=c(3,0,0,0), pty="m") 
+  par(mar=c(4,0,0,0), pty="m")	# The non-zero margin should be the same as the margins defined above (using mar) when doing the main plot of x2 vs. x1
     ## Make the horizontal axis of the distribution stick to the right axis of the scatter plot
     ## Also make the plot region maximal so that the whole subplot is occupied by the distribution
   panel.dist(x2, histogram=histogram, horizontal=FALSE, add=FALSE, main="", axes=FALSE, xlim=xlim, ylim=ylim)
-
-  ### Restore mar option
-  par(mar=mar)
 }
 
-# Define the position of the x-axis in a pairs plot
-pairsXAxisPosition = function(xaxt="s")
-# Created: 2013/09/16
-# Modified: 2013/09/16
-# Description: Defines the position in a pairs panel to place the x-axis ticks using the same logic as pairs()
-{
-  mfg = par("mfg")  # 4-element array with the following info: current panel position, panel structure (e.g. (2,3,4,4))
-
-  # X-axis
-  if (xaxt == "n") {
-    # Place the axis ticks next to the axis when no axis ticks have been required at the pairs() call
-    outer = FALSE
-    line = 0
-    side = 1
-  } else {
-    # Place the axis ticks on the outer panel side o.w.
-    # The side is chosen based on the mfg option value, in order to mimic the same logic as the pairs() function
-    outer = TRUE
-    line = 0  # This number should be -gap, where gap is the space between the subplots in margin lines. However, I don't know yet how to retrieve the value of gap in the current pairs() call!
-    if (mfg[2] %% 2 == 1) {
-      side = 1
-    } else {
-      side = 3
-    }
-  }
-
-  return(list(side=side, outer=outer, line=line))
-}  
-  
-# Define the position of the y-axis in a pairs plot
-pairsYAxisPosition = function(yaxt="s")
-# Created: 2013/09/16
-# Modified: 2013/09/16
-# Description: Defines the position in a pairs panel to place the y-axis ticks using the same logic as pairs()
-{
-  mfg = par("mfg")  # 4-element array with the following info: current panel position, panel structure (e.g. (2,3,4,4))
-  
-  # Y-axis
-  if (yaxt == "n") {
-    # Place the axis ticks next to the axis when no axis ticks have been required at the pairs() call
-    outer = FALSE
-    line = 0
-    side = 2
-  } else {
-    # Place the axis ticks on the outer panel side o.w.
-    # The side is chosen based on the mfg option value, in order to mimic the same logic as the pairs() function
-    outer = TRUE
-    line = 0  # This number should be -gap, where gap is the space between the subplots in margin lines. However, I don't know yet how to retrieve the value of gap in the current pairs() call!
-    if (mfg[1] %% 2 == 1) {
-      side = 4
-    } else {
-      side = 2
-    }
-  }
-  
-  return(list(side=side, outer=outer, line=line))
-}
-
-# Correlations as an off-diagonal panel function in pairs(). The font size is proportional to the correlation.
+# panel.cor: Correlations as an off-diagonal panel function in pairs(). The font size is proportional to the correlation.
 # TODO:
 # - 2013/12/13: Make the background color of the whole panel vary according to the correlation level, e.g. blue for negative
 # correlation, white for no correlation, red for positive correlation.
@@ -466,7 +553,7 @@ panel.cor <- function(x, y, digits=2, prefix="", use="pairwise.complete.obs", ce
   text(0.5, 0.5, txt, cex=cex*r)
 }
 
-# 1D density estimation and boxplot as a diagonal panel of a pairs() plot.
+# panel.dist: 1D density estimation and boxplot as a diagonal panel of a pairs() plot.
 # (Ref: Uwe Ligges, https://stat.ethz.ch/pipermail/r-help/2011-July/282611.html)
 # TODO:
 # - 2013/09/21: Replace the use of the barplot() function with the use of the rect() function to draw the histogram bars
@@ -496,12 +583,12 @@ panel.dist = function(x, add=TRUE, histogram=FALSE, horizontal=TRUE, xlim=NULL, 
   # Create a new plot if requested
   if (!add) {
     if (horizontal) { # boxplot is horizontal => density is horizontal
-      if (missing(xlim)) xlim = range(dens$x)
+      if (missing(xlim) | is.null(xlim)) xlim = range(dens$x)
       ylim = range(dens$y)
       if (histogram) ylim = range(c(ylim), hist$density*1.5)
     } else {  # boxplot is vertical => density is rotated 180 degrees (to show the density on a vertical axis on the side of a scatter plot)
       xlim = range(dens$y)
-      if (missing(ylim)) ylim = range(dens$x)
+      if (missing(ylim) | is.null(ylim)) ylim = range(dens$x)
       if (histogram) xlim = range(c(xlim), hist$density*1.5)
     }
     plot(dens, type="n", xlab="", ylab="", xlim=xlim, ylim=ylim, ...)
@@ -545,7 +632,7 @@ panel.dist = function(x, add=TRUE, histogram=FALSE, horizontal=TRUE, xlim=NULL, 
   }
 }
 
-# Histogram as a diagonal panel function in pairs()
+# panel.hist: Histogram as a diagonal panel function in pairs()
 panel.hist <- function(x, ...)
 # Created: 2008/06/20
 # Modified: 2008/06/20
@@ -571,16 +658,7 @@ panel.hist <- function(x, ...)
   rect(breaks[-nB], 0, breaks[-1], y, col="light cyan")
 }
 
-# Smoohting spline fit by a grouping variable
-panel.smooth <- function(x, y, group, ...)
-# Created: 2009/02/02
-# Modified: 2009/02/02
-{
-
-
-}
-
-# Image showing the 2D density estimation
+# plot.image: Image showing the 2D density estimation
 # (Ref: Uwe Ligges, https://stat.ethz.ch/pipermail/r-help/2011-July/282611.html)
 plot.image = function(x, y, col="red", nlevels=12, xaxt="s", yaxt="s", addXAxis=FALSE, addYAxis=FALSE, add=TRUE, ...)
 # Created: 2013/07/08
@@ -632,7 +710,7 @@ plot.image = function(x, y, col="red", nlevels=12, xaxt="s", yaxt="s", addXAxis=
 }
 
 
-# Binned plot
+# plot.binned: Binned plot
 # TODO:
 # - 2008/09/09: Add a parameter that allows to show the labels of the original scale when the plotted variable
 # is log-transformed.
@@ -718,7 +796,7 @@ plot.binned = function(
 #						(2014/01/04) Added parameters col.pred and col.target to define the colors of the 'pred' and 'target' lines in the plot.
 #						(2014/03/04) Changed the color parameter for the pointlabels and error bars from "blue" to "black", so that they are in neutral color which does not depend on the color used for the points.
 #						(2014/03/11) Added parameters 'type2' and 'pch2' defining the form and symbols for the plot of the target variable.
-#						(2014/03/31) Fixed errors occurring with target variable, when: target variable has missing values (NA) and error message showing up when target=NULL was explictly passed (this was solved by replaing condition "!missing(target)" with "!is.null(target)")
+#						(2014/03/31) Fixed errors occurring with target variable, when: target variable has missing values (NA) and error message showing up when target=NULL was explictly passed (this was solved by replacing condition "!missing(target)" with "!is.null(target)")
 #												 Simplified the specification of the axis formats by removing parameters xlimProperty, ylimProperty, ylim2Property. Now the "new" or "orig" specifications should be directly passed to xlim, ylim, ylim2.
 #												 Updated ylim range when pred variable is passed and ylim="new".
 #						(2014/05/11) Added logical parameter 'limits' which indicates whether to show the x limits of each bin as vertical gray lines.
@@ -1104,7 +1182,7 @@ plot.binned = function(
 }
 
 
-# Pairs plot of a set of variables where customized information is shown on the lower, diagonal and upper panels
+# pairs.custom: Pairs plot of a set of variables where customized information is shown on the lower, diagonal and upper panels
 # CHECK ALSO the car package (companion to applied regression) for interesting functions to enhance plots commonly used for regression)
 pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.panel=points, max.panels=6, pause=TRUE, target=NULL, ...)
 # Created:      2013/07/08
@@ -1198,7 +1276,7 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 	### Target variable
 	# If a target parameter is passed, place it as first column of x so that it is plotted at the first row of the pairs plot 
 	# in EVERY generated pairs plot.
-	if (!missing(target)) {
+	if (!is.null(target)) {
 		# Check the existence of the variable indicated in 'target' in matrix or data frame 'x'.
 		# (recall that 'target' contains the NAME of the target variable)
 		if (!is.null(checkVariables(x, target))) {
@@ -1262,7 +1340,7 @@ pairs.custom = function(x, lower.panel=plot.image, diag.panel=panel.dist, upper.
 	}
 }
 
-# Histogram in log scale
+# hist.log: Histogram in log scale
 hist.log = function(x, constant=1, format="E", cex=1, las=1, ...)
 # Created: 		    2008/09/19
 # Modified: 	    2008/09/19
@@ -1287,7 +1365,7 @@ hist.log = function(x, constant=1, format="E", cex=1, las=1, ...)
 	mtext(labels, side=1, at=xmin:xmax, line=1, cex=cex, las=las);
 }
 
-# Plot in log scale (the log transformation is safeLog(x) = sign(x)*log10(constant + x))
+# plot.log: Plot in log scale (the log transformation is safeLog(x) = sign(x)*log10(constant + x))
 # NOTE (2008/10/03): Could use function get() to decide what kind of plot to do depending on parameter (e.g. plot or hist)
 #fname <- "pchisq";
 #fname <- get(fname , mode="function");
@@ -1369,7 +1447,7 @@ plot.log = function(x, y, log="x", constant=c(1,1), format=c("E","E"), cex=c(1,1
 	#--------------------------------------- Plot --------------------------------------------#
 }
 
-# Plot using specified x tick marks
+# plot.axis: Plot using specified x tick marks
 plot.axis = function(x, y, xticks=NULL, xlabels=NULL, las=1, grid=TRUE, lty.grid=2, lwd.grid=1, ...)
 # Created: 		    2008/09/25
 # Modified:   	  2008/09/25
@@ -1401,7 +1479,7 @@ plot.axis = function(x, y, xticks=NULL, xlabels=NULL, las=1, grid=TRUE, lty.grid
 	}
 }
 
-# Plot a histogram (i.e. plot boxes like the ones generated by hist())
+# plot.hist: Plot a histogram (i.e. plot boxes like the ones generated by hist())
 plot.hist = function(x, y, ...)
 # Created: 		  2008/10/03
 # Modified: 	  2008/10/03
@@ -1410,7 +1488,7 @@ plot.hist = function(x, y, ...)
 #				x			  Breaks of histogram
 #				y			  Counts or density of histogram
 #				...		  Additional parameters to pass to the plot() function.
-# NOTE: (2014/03/28) This same plot could be much more easily done with the rect() function (see panel.dist() in this module)
+# NOTE: (2014/03/28) This same plot could be much more easily done with the rect() function (see panel.hist() in this module)
 {
 	toplot = cbind(x[-1], y)
 	tp = matrix(nrow=3*nrow(toplot)+1, ncol=2)
@@ -1427,73 +1505,13 @@ plot.hist = function(x, y, ...)
 	polygon(tp, ...)
 }
 
-# Auxiliary functions used by plot.outliers2d
-# ellipse() and ellipsem() were taken from: http://ms.mcmaster.ca/peter/s4c03/s4c03_0506/classnotes/DrawingEllipsesinR.pdf
-# The function ellipsem() addsthe ellipse t(x-mu)%*%amat%*%(x-mu) = c2 to the current plot or a new plot; 
-# function ellipse() draws an ellipse given the half-lengths of the axes, the angle of orientation, and the centre; 
-# angle() computes the angle between the X-axis and a vector drawn from the origin to the point (x, y).
-ellipse = function (hlaxa = 1, hlaxb = 1, theta = 0, xc = 0, yc = 0, newplot = F, npoints = 100, ...) 
-{ 
-  a <- seq(0, 2 * pi, length = npoints + 1) 
-  x <- hlaxa * cos(a) 
-  y <- hlaxb * sin(a) 
-  alpha <- angle(x, y) 
-  rad <- sqrt(x^2 + y^2) 
-  xp <- rad * cos(alpha + theta) + xc 
-  yp <- rad * sin(alpha + theta) + yc 
-  if (newplot) 
-    plot(xp, yp, type = "l", ...) 
-  else lines(xp, yp, ...)
-  invisible()
-}
-ellipsem = function (mu, amat, c2, npoints = 100, showcentre = T, ...) 
-{ 
-  if (all(dim(amat) == c(2, 2))) { 
-    eamat <- eigen(amat) 
-    hlen <- sqrt(c2/eamat$val) 
-    theta <- angle(eamat$vec[1, 1], eamat$vec[2, 1]) 
-    ellipse(hlen[1], hlen[2], theta, mu[1], mu[2], npoints = npoints, 
-            ...) 
-    if (showcentre) 
-      points(mu[1], mu[2], pch = 3) 
-  } 
-  invisible() # This allows for an object to be returned when they are assigned but which do not print when they are not assigned
-}
-angle = function (x, y) 
-{ 
-  angle2 <- function(xy) { 
-    x <- xy[1] 
-    y <- xy[2] 
-    if (x > 0) { 
-      atan(y/x) 
-    } 
-    else { 
-      if (x < 0 & y != 0) { 
-        atan(y/x) + sign(y) * pi 
-      } 
-      else { 
-        if (x < 0 & y == 0) { 
-          pi 
-        } 
-        else { 
-          if (y != 0) { 
-            (sign(y) * pi)/2 
-          } 
-          else { 
-            NA 
-          } 
-        } 
-      } 
-    } 
-  } 
-  apply(cbind(x, y), 1, angle2) 
-} 
-
-# Plot 2D outliers based on the estimation of a multivariate gaussian distribution (Ref: Machine Learning course at Coursera)
-plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=0.01, add=FALSE, plot.kde=FALSE, plot.id=TRUE, lwd=1, col.outlier="red", cex=0.6, pos=3, srt=0, ...)
+# plot.outliers2d: Plot 2D outliers based on the estimation of a multivariate gaussian distribution (Ref: Machine Learning course at Coursera)
+plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=0.01, add=FALSE, plot=TRUE, plot.kde=FALSE, plot.id=TRUE, lwd=1, col.outlier="red", cex=0.6, pos=3, srt=0, ...)
 # Created: 			20-Apr-2014
 # Author: 			Daniel Mastropietro
-# Parameters:   cutoff: when (estimated gaussian density) / max(estimated gaussian density) < cutoff => flag the point as outlier
+# Parameters:   x: variable x to analyze or matrix/data.frame containing both variables to analyze
+#								y: variable y to analyze or empty (when x is a matrix/data.frame)
+#								cutoff: when (estimated gaussian density) / max(estimated gaussian density) < cutoff => flag the point as outlier
 #								srt: degrees of rotation for the text shown by text() (e.g. srt=90). This is a par() option that applies only to text information on a plots.
 {
   ### Data prep
@@ -1511,19 +1529,21 @@ plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=
   # Name the rows using the id variable
   if (!is.null(id)) rownames(xy) = id[indok]
   
-  # Plot
-  if (add) {
-    points(xy, ...)
-  } else {
-    plot(xy, ...)
+  ### Plot
+  if (plot) {
+		if (add) {
+			points(xy, ...)
+		} else {
+			plot(xy, ...)
+		}
+		#  do.call(plot.fun, list(xy, ...))
+			## This do.call() does NOT work properly!! it generates a plot showing all the values to be plotted and it's a mess!!!!
+			## (2014/05/11) OK! I found why! The reason is that the plot() function shows deparse(substitute(x)) and deparse(substitute(y)) as labels
+			## for the x and y axis. In a do.call(), the parameters passed in the parameter list() are EVALUATED, meaning that the parameters x and y
+			## (or the matrix xy as in this case) contain the VALUES to be plotted, NOT the NAME of the matrix/vectors containing the values to be plotted...
+			## Therefore, the result of deparse(substitute(x)) will be the plotted values and NOT the variable names.
+			## This should be solved by replacing xy with substitute(xy). See 'R Help.txt' under entry "PARSE FUNCTION PARAMETERS".
   }
-  #  do.call(plot.fun, list(xy, ...))
-  	## This do.call() does NOT work properly!! it generates a plot showing all the values to be plotted and it's a mess!!!!
-  	## (2014/05/11) OK! I found why! The reason is that the plot() function shows deparse(substitute(x)) and deparse(substitute(y)) as labels
-  	## for the x and y axis. In a do.call(), the parameters passed in the parameter list() are EVALUATED, meaning that the parameters x and y
-  	## (or the matrix xy as in this case) contain the VALUES to be plotted, NOT the NAME of the matrix/vectors containing the values to be plotted...
-  	## Therefore, the result of deparse(substitute(x)) will be the plotted values and NOT the variable names.
-  	## This should be solved by replacing xy with substitute(xy). See 'R Help.txt' under entry "PARSE FUNCTION PARAMETERS".
   
   # Compute the centroid and the covariance matrix
   centroid = apply(xy, 2, FUN=center)
@@ -1545,7 +1565,7 @@ plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=
   #   persp(gx, gy, dens2, col=colors[denscol], ticktype="detailed", theta=40, phi=20)
   
   ### 2D density estimation
-  if (plot.kde) {
+  if (plot & plot.kde) {
     xy.kde = kde2d(xy[,1], xy[,2])
     contour(xy.kde$x, xy.kde$y, xy.kde$z, col="green", nlevels=5, add=TRUE, lwd=lwd)
   }
@@ -1563,8 +1583,10 @@ plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=
   dens2 = exp(-0.5*mahalanobis(xygrid, centroid, SIGMA)) / sqrt(2*pi*det(SIGMA))
   # Convert dens2 to a matrix of size (length(xgrid) * length(ygrid))
   dens2 = matrix(dens2, nrow=length(gx), ncol=length(gy))
-  contour(gx, gy, dens2, nlevels=5, add=TRUE, lwd=lwd, col="blue")
-  points(centroid[1], centroid[2], pch="x", lwd=lwd, cex=2, col="blue")
+  if (plot) {
+		contour(gx, gy, dens2, nlevels=5, add=TRUE, lwd=lwd, col="blue")
+		points(centroid[1], centroid[2], pch="x", lwd=lwd, cex=2, col="blue")
+  }
   
   # Using the ellipse() function...
   gaussian.cutoff = cutoff*max(gaussian.density)
@@ -1573,7 +1595,7 @@ plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=
   cat("Cut off value ( based on cutoff level", cutoff, "):", formatC(gaussian.cutoff, format="e", digits=4), "\n")
   cat("Min of estimated gaussian density:", formatC(min(gaussian.density), format="e", digits=4), "\n")
   maha2.cutoff = -2 * log(2*pi*sqrt(det(SIGMA)) * gaussian.cutoff)
-  try( ellipsem(centroid, solve(SIGMA), maha2.cutoff , col=col.outlier, lwd=lwd) )
+  if (plot) try( ellipsem(centroid, solve(SIGMA), maha2.cutoff , col=col.outlier, lwd=lwd) )
   
   # Show the cutoff ellipse
   # NOTE: the above call to ellipse() is more reliable in terms of showing the actual cutoff
@@ -1582,11 +1604,13 @@ plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=
   outliers = which(gaussian.density < gaussian.cutoff)
   if (length(outliers) > 0) {
     cat("Number of outliers detected for variables", varnames, ":", length(outliers), "(", formatC(length(outliers) / nrow(xy) * 100, format="g", digits=1), "%)\n")
-    points(xy[outliers,], pch=21, bg=col.outlier, col=col.outlier)
-    if (plot.id) {
-      op = par(xpd=TRUE)
-      text(xy[outliers,], labels=rownames(xy)[outliers], offset=0.5, pos=pos, srt=srt, cex=cex)
-      par(xpd=op$xpd)
+    if (plot) {
+			points(xy[outliers,], pch=21, bg=col.outlier, col=col.outlier)
+			if (plot.id) {
+				op = par(xpd=TRUE)
+				text(xy[outliers,], labels=rownames(xy)[outliers], offset=0.5, pos=pos, srt=srt, cex=cex)
+				par(xpd=op$xpd)
+			}
     }
   } else {
     cat("Number of outliers detected for variables", varnames, ":", length(outliers), "(", formatC(length(outliers) / nrow(xy) * 100, format="g", digits=1), "%)\n")
@@ -1596,25 +1620,13 @@ plot.outliers2d = function(x, y=NULL, id=NULL, center=median, scale=cov, cutoff=
   return(invisible(outliers))
 }
 
-# Same function as plot.outliers2d but as a panel function (i.e. always uses add=TRUE)
+# panel.outliers2d: Same function as plot.outliers2d but as a panel function (i.e. always uses add=TRUE)
 panel.outliers2d = function(x, y, id=NULL, center=median, scale=cov, cutoff=0.01, plot.kde=FALSE, plot.id=TRUE, lwd=1, cex=0.6, pos=3, srt=0, ...)
 {
-  ### Parse the function call
-  call = match.call()
-  # Put all calling parameters into a parameter list
-  paramsList = as.list(call)
-  # Remove the function name from the parameter list
-  paramsList[[1]] = NULL
-  # Set the add parameter to TRUE
-  paramsList$add = TRUE
-  # Use substitute() for the x and y elements of the list so that the deparse(substitute()) statement applied to x and y inside the plot.outliers2d()
-  # function works correctly by returning the names of variables x and y received by that function.
-  # This solves the error I received initially where the message "y is missing" was issued...
-  paramsList$x = substitute(x)
-  paramsList$y = substitute(y)
-  do.call("plot.outliers2d", paramsList)
+	plot.outliers2d(x, y, id=id, center=center, scale=scale, cutoff=cutoff, plot.kde=plot.kde, plot.id=plot.id, lwd=lwd, cex=cex, pos=pos, srt=srt, add=TRUE, ...)
 }
 
+# biplot.custom: Customized biplot where 2D density estimation of points is shown instead of the actual points (suitable for large number of points)
 # TODO:
 # - 2013/11/15: Extend this function so that biplots of a selected set of principal components (more than 2!) are produced in a pairs
 # plot fashion. Currently this is not possible because I am using function filled.contour() which always generates a new plot
@@ -1625,16 +1637,16 @@ panel.outliers2d = function(x, y, id=NULL, center=median, scale=cov, cutoff=0.01
 biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersFlag=TRUE, pointlabels=NULL, thr=4, outliersMaxPct=0.5, ...)
 # Created:      2013/08/28
 # Modified:     2013/08/28
-# Description:  Custom biplot suitable for many points
+# Description:  Custom biplot suitable for large number of points
 # Details:      The customized biplot shows:
 #               - 2D estimated desnsity instead of actual points
 #               - Axis limits are computed properly
-#               - Optionally, a panel plot of the first k principal components in pairs (e.g. top PCs explaining 80% of the variation)
+#               - [NOT IMPLEMENTED YET!] Optionally, a panel plot of the first k principal components in pairs (e.g. top PCs explaining 80% of the variation)
 # Parameters:  
 #               x:  An object of class princomp
 # Output:       When outliersFlag=TRUE, a data frame containing the points identified as outliers on the analyzed principal components
 #								is returned.
-# Assumptions:  There are no missing values (NA) in the data!
+# Assumptions:  There are NO missing values (NA) in the data!
 {
   
   #----- DEFINE AUXILIARY FUNCTIONS -----#
@@ -1798,15 +1810,15 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
   }
 }
 
-# Plot CDF of a numeric variable
+# plot.cdf: Plot CDF of a numeric variable
 plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 # Created:      12-Mar-2014
 # Modified:     12-Mar-2014
 # Description:  Plot CDF of a numeric variable in the quantiles specified in parameter 'probs'
 # Details:			The parameter probs corresponds to the parameter of the same name in function quantile()
-# Parameters:   x: A numeric array
+# Parameters:   x: A numeric array (missing values are accepted and a warning is shown in that case)
 # Output:       A matrix containing the CDF of x where the row names are the quantile values defined in 'probs'.
-# Assumptions:  There are no missing values (NA) in the data!
+# Assumptions:  None
 #
 # HISTORY:	(2014/04/15)
 #						Fixed a bug related to the variables xlab and ylab that were found as functions in the ggplot2 namespace.
@@ -1849,7 +1861,7 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 	return(invisible(as.matrix(x.cdf)))
 }
 
-# Bar plot of a categorical variable with categories sorted by a target variable
+# plot.bar: Bar plot of a categorical variable with categories sorted by a target variable
 plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE, horiz=FALSE, bars=TRUE, width=1, cex.names=0.6, las=3, col.bars="black", plot=TRUE, ...)
 # Created:      26-Mar-2014
 # Modified:   	26-Mar-2014
@@ -2033,8 +2045,7 @@ plot.bar <- plot.bars <- function(x, y, event="1", FUN="table", decreasing=TRUE,
 	return(invisible(tab))
 }
 
-
-# Cumulative plots of y vs. cumulative x
+# cumplot: Cumulative plots of y vs. cumulative x
 cumplot = function(x, y, decreasing=TRUE, plot=TRUE, type="l", col="blue", ...)
 # Created:      07-May-2014
 # Modified:     07-May-2014
@@ -2115,107 +2126,4 @@ cumplot = function(x, y, decreasing=TRUE, plot=TRUE, type="l", col="blue", ...)
 
   return(invisible(toplot))
 }
-######################################### GRAPHICAL functions #################################
-
-
-########################################## EXTERNAL functions #################################
-# 2013/09/19
-# Copied from Antoine Thibaud and changed a little bit, as follows:
-# - renamed 'cant.bines' to 'groups'
-# - added parameter 'lwd' for the line width of the ROC line
-# - added report of AR (Accuracy Ratio) or Gini Index along with the AUC.
-roc.1 <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.type = 1, round.AUC = 2, lwd=1, col=NULL,
-																 label=NULL, xlab="Proporcion de buenos identificados", ylab="Proporcion de malos identificados", title="Curva ROC", cex=0.8, cex.main=1)
-  # Genera una curva roc a partir de un df con una columna de clase binaria y otra de probabilidades
-  # Hace un rank de las probabilidades y construye una roc en base al mismo
-  
-  # Mediante el parametro pos, se pueden ir superponiendo hasta 4 curvas roc
-  # Ejemplo de uso:
-  #   roc.1(clase ~ prob, mod1)
-  #   roc.1(clase ~ prob, mod2, pos = 2)
-  #   roc.1(clase ~ prob, mod2, pos = 3)
-  # donde mod1, mod2 y mod3 son dfs con clase y probabilidad predicha...
-{
-  df <- model.frame(formula, data)
-  colnames(df) <- c('clase', 'pm')
-  df$clase <- factor(df$clase)
-  
-  descrip.clase <- unique(df$clase)
-  # Rank de la prob. de 'malo'
-  #   df$grupo <- findInterval(df$pm, 
-  #                            quantile(df$pm, seq(0, 1, len = groups - 1), type = quantile.type),
-  #                            all.inside = TRUE, rightmost.closed = TRUE)
-  ranking <- rank(df$pm,  ties.method = "average")
-  df$grupo <- findInterval(ranking, 
-    quantile(ranking, seq(0, 1, len = groups), type = quantile.type),
-    all.inside = TRUE, rightmost.closed = TRUE)
-  
-  tbl <- as.matrix(table(df$grupo, df$clase), ncol=3)
-  
-  tbl.df <- as.data.frame(cbind(tbl[, 1], tbl[, 2]))
-  colnames(tbl.df) <- dimnames(tbl)[[2]]
-  
-  min.prob <- tapply(df$pm, df$grupo, min, simplify = TRUE)
-  tbl.df <- cbind(tbl.df, min.prob[match(dimnames(min.prob)[[1]], rownames(tbl.df))])
-  colnames(tbl.df)[length(colnames(tbl.df))] <- 'min.prob'
-  
-  max.prob <- tapply(df$pm, df$grupo, max, simplify = TRUE)
-  MAX.max.prob <- max(max.prob)
-  tbl.df <- cbind(tbl.df, max.prob[match(dimnames(max.prob)[[1]], rownames(tbl.df))])
-  colnames(tbl.df)[length(colnames(tbl.df))] <- 'max.prob'
-  
-  tbl.df[order(-as.numeric(rownames(tbl.df))), 'N.acum'] <-
-    cumsum(tbl.df[order(-as.numeric(rownames(tbl.df))), 1])
-  tbl.df[order(-as.numeric(rownames(tbl.df))), 'S.acum'] <-
-    cumsum(tbl.df[order(-as.numeric(rownames(tbl.df))), 2])
-  
-  tbl.df$N.acum2 <- tbl.df$N.acum / sum(tbl.df[[1]])
-  tbl.df$S.acum2 <- tbl.df$S.acum / sum(tbl.df[[2]])
-  
-  # Agrego una ?ltima fila para generar el punto (0, 0)
-  ## Lo hago en dos pasos porque me falla el rbind si los nombres de columnas no son iguales...
-  ult.fila <- data.frame(0, 0, 
-    min.prob = MAX.max.prob, max.prob = 1,
-    N.acum = 0, S.acum = 0, N.acum2 = 0, S.acum2 = 0,
-    row.names = as.vector(as.character(groups)))
-  colnames(ult.fila) <- colnames(tbl.df)
-  tbl.df <- rbind(tbl.df, ult.fila)
-  
-  # Area Under the Curve
-  AUC = -sum((((2 * tbl.df$S.acum2[-1]) - diff(tbl.df$S.acum2)) /2) * diff(tbl.df$N.acum2))
-  # Accuracy Ratio or Gini Index = (2*AUC - 1).
-  # Note that the AUC is already independent of event rate and that is why the event rate is not needed to compute the AR or Gini index.
-  # The Gini index is the ratio of the ABSS and 0.5, where:
-  # ABSS = Area Between the...
-  # 	- Sensitivity curve = "True Positive Rate as a function of decreasing score" = "%Hits of Events as a function of decreasing score"
-  # 	- (1-Specificity) curve = "False positive Rate as a function of decreasing score" = "%Hits of Non-Events as a function of decreasing score"
-  # and 0.5 = the maximum possible ABSS area (i.e. the area between the OPTIMUM Sensitivity and (1-Specificity) curves).
-  # For more info, see my notes on the Nemo notebook started at Meridian in Mexico.
-  AR = 2*AUC - 1
-  if (is.null(col)) {
-  	color = switch(pos, 'blue', 'green', 'red', 'black', 'purple', 'yellow')
-  } else {
-    color = col
-  }
-  
-  if (pos == 1) {
-    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color,
-      xlim = c(0, 1), ylim = c(0, 1),
-      xlab = xlab, ylab = ylab,
-      main = title, cex.main=cex.main, lwd=lwd)
-    lines(c(0, 1), c(0, 1), col = 'red', lty = 3)
-  } else{
-    par(new=TRUE)
-    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color, 
-      xlim = c(0, 1), ylim = c(0, 1), lwd=lwd,
-      ann = FALSE, axes = FALSE)
-  }
-  if (is.null(label)) label = deparse(substitute(data))
-
-  text(0.6, cex * pos / 7, paste0(label, ':\nAUC=', formatC(AUC, format='g', round.AUC), ', AR/Gini=', formatC(AR, format='g', round.AUC)), cex = cex, col = color)
-
-	if (print) print(tbl.df)
-
-  return(invisible(list(data=tbl.df, AUC=AUC, AR=AR)))
-}
-########################################## EXTERNAL functions #################################
+###################################### GRAPHICAL functions ####################################

@@ -78,3 +78,19 @@ startup-function.r:
 datamining-function.r:
 - Updated functions:
 	- ModelFit(), model.fit(): implemented a flexible call to plot.binned() using formals() (to get the parameters present at the signature of the function) and match.call() to get the parameters passed by the user. This is important because I can now use this implementation to better understand the meaning and use of quote() and substitute(). See also the notes in 'R Help.txt' about this matter.
+
+
+commit of Tools: 2014/05/11 - 2014/05/22 [COMMITTED]
+----------------------------------------
+Function redistribution, cleaned up documentation
+
+R files: moved function roc.1() from startup-functions.r to datamining-functions.r and renamed it to roc().
+
+startup-function.r:
+- Updated functions:
+	- plot.dist(): finalized and successfully tested the function, also with a plotting function different from plot() (e.g. plot.binned())
+	- pairs.custom(): fixed a bug occurring when target was passed as NULL by replacing 'if (!missing(target))' with 'if (!is.null(target))'.
+	
+datamining-functions.r:
+- Updated functions:
+	- GroupCategories(), roc(): replaced paste0() with paste() because paste0() does not exist in version R-2.8.0 used in SPSS.
