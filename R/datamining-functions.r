@@ -1,6 +1,6 @@
 # datamining-functions.r
 # Created: 		  03-Jul-2013
-# Modified: 	  22-May-2014
+# Modified: 	  31-Jul-2014
 # Author: 		  Daniel Mastropietro
 # Description: 	Set of Data Mining functions
 # Dependencies: startup-functions.r, from which the following functions are used:
@@ -56,6 +56,9 @@
 # - 2014/03/26: Allow passing several input variables to analyze. In order to link this function with the AssignCategories() function,
 # the output of such call should be a LIST (e.g. called groupedCat). See the use of groupedCat in AssignCategories() below.
 # - 2014/04/02: Allow passing the value of an existing x category (e.g. "ZZZ-OTHER") where all categories with small size should be absorbed.
+# -[DONE-2014/07/31] 2014/07/31: Extend the application of this function to categorical x values that have MISSING values (NA), so that missing values are treated
+# as a different valid category. Currently, when running the function on an x with missing values, these values are removed, but I don't know
+# where in the code!!
 GroupCategories = function(
 		x,									# Input categorical variable to analyze
 		y,									# Target variable,
@@ -63,6 +66,7 @@ GroupCategories = function(
 		type="cat",					# Type of target variable y: "cat" (for categorical) or "cont" (for continuous). This affects the test that is used for significant differences among contiguous x categories.
 		event="1",					# Event of interest of categorical variable y when type="cat"
 		stat="mean",				# Statistics to use for the computation of the representative value of y for each category of x when type != "cat"
+		na.rm=FALSE,				# Whether NAs in the x variable should be excluded from the analysis. Note that NAs in the y variable are still acceptable but are always ignored. (For more information of this treatment, see help(table))
 		varname=NULL,				# Name of the analyzed variable (useful when calling this function from within a FOR loop where x is passed as tofit[,v], where e.g. v = "x1"
 		# Settings for merging consecutive categories
 		pthr=c(0.50,0.10),	# Threshold for the p-value of the Chi-square test or t test that is used to decide whether contiguous categories are merged.
@@ -190,7 +194,7 @@ GroupCategories = function(
 		if (missing(pthr)) pthr = 0.10
 	}
 	bars = plot.bar(x, y,
-									event=event, FUN=FUN, las=3,
+									event=event, na.rm=na.rm, FUN=FUN, las=3,
 									decreasing=decreasing,
 									main=paste("Initial categories of variable", ifelse(!is.null(varname), varname, deparse(substitute(x)))),
 									cex.names=cex.names,
@@ -639,8 +643,13 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 			names4group = names[ind]
 			#  if (newvalues[j] == "Z-REST") { newvalues[j] = paste(newvalues[j], length(ind), sep="") }
 			dat[dat[,v] %in% names4group, newv] = newvalues[[i]][j]
-			cat("Group", j, "(", length(ind), "):\n", paste(names4group, collapse="\n\t"), "\n")
-			cat("\t---> assigned to:", newvalues[[i]][j], "\n\n")
+			# Show the grouping being carried out.
+			# (note: for correct alignment of the original group values, it is important to:
+			# 	- add a \t before the paste(names4group...)
+			#		- add a space as final character in the collapse= option
+			#		- add a space between \t and ---> in the final cat() function
+			cat("Group", j, "(", length(ind), "):\n\t", paste(names4group, collapse="\n\t "), "\n")
+			cat("\t ---> assigned to:", newvalues[[i]][j], "\n\n")
 		}
 	}
 	
@@ -1521,7 +1530,8 @@ InformationValue = function(
   groups=20,        # Number of groups into which the continuous variables are binned (equal-size bins)
   breaks=NULL,      # Vector defining the upper boundaries of the bins into which ALL CONTINUOUS variables are binned
   stat="mean",      # Statistic to compute on each bin of the analyzed continuous variables
-  event="LAST")     # Event of interest ("FIRST" or "LAST") which is used as numerator in the WOE formula
+  event="LAST",     # Event of interest ("FIRST" or "LAST") which is used as numerator in the WOE formula
+  spsscode=FALSE)		# Whether to include the SPSS code to create WOE variables as part of the output
   # Created: 2013/07/25
   # Modified: 2013/07/25
   # Descrtiption: Information Value for continuous and categorical variables on a binary target
@@ -1533,102 +1543,131 @@ InformationValue = function(
   #   varnum="N_EQX_EDAD V_EQX_SALARIO")
 {
   
-#----- DEFINE AUXILIARY FUNCTIONS -----#
-iv = function(y, group, x=NULL, event="LAST", stat="mean") {
-  # Parameters:
-  # y:      target variable on which the Information Value of x is computed
-  # group:  group variable defining the different categories of x used to compute the Information Value
-  # x:      continuous variable for which the Information Value is computed (set it to NULL when x is categorical)
-  # event:  defines the event of interest for the WOE computation.
-  #         Either the "FIRST" or the "LAST" ordered value out of the two values taken by variable 'y'
-  #         is used at the numerator of the WOE formula: WOE = log(#Class1/#Class2)
-  #         When event = "LAST", Class1 is the LARGEST of the values
-  #         Otherwise, Class1 is the SMALLEST of the values
-  # Output: A data frame containing the following columns:
-  #         - group:  distinct categories of x used to compute the Information Value on y
-  #         - stat:   statistic value for each category when x is continuous or NA when x is NULL (meaning that the variable on which the Information Value is computed is categorical)
-  #         - woe:    Weight of Evidence for each category of x on y
-  #         - iv:     contribution to the total Information Value by the corresponding category of x.
-  #
-  
-  #---------------------- Parse input parameters -------------------------
-  ### TARGET
-  # Compute the levels of the target variable
-  y.levels = data.frame(order=1:nlevels(as.factor(y)), row.names=levels(as.factor(y)))
+	#----- DEFINE AUXILIARY FUNCTIONS -----#
+	# Return the type of a variable in a data frame (character or numeric)
+	getVarType = function(x)
+	{
+#		# OLD way of retrieving the variable type
+#    if ( is.na( max( as.numeric(as.character(x[!is.na(x)])) ) ) ) { vartype = "character" } else { vartype = "numeric" }
 
-  ### GROUP
-  # Just in case, eliminate not-observed levels of the factor variable GROUP (this is done by applying the factor() function to the variable)
-  group = factor(group)
+		# Check if the variable is factor otherwise, typeof() returns numeric!! (since factor levels are converted or stored as numbers)
+ 		if (is.factor(x)) {
+ 			vartype = typeof(levels(x))
+ 		} else {
+ 			vartype = typeof(x)
+ 		}
+ 		
+ 		return(vartype)
+	}
+	
+	# Return the lower and upper bound of intervals of the type (x1,x2] or [x1,x2), etc. and also the brackets
+	# (Inspired by the midpoints() function published on Matt's Stats around May-2014)
+	getBounds <- function(x)
+	{
+		x = as.character(x)
+		left <- substr(x,1,1); 								opleft = ""; 	if (left == "(") { opleft = "<" } else if (left == "[") { opleft = "<=" }
+		right <- substr(x,nchar(x),nchar(x)); opright = ""; if (right == ")") { opright = "<" } else if (right == "]") { opright = "<=" }
+		lower <- as.numeric(gsub(",.*","",gsub("\\(|\\[|\\)|\\]","", x)))
+		upper <- as.numeric(gsub(".*,","",gsub("\\(|\\[|\\)|\\]","", x)))
+		return(list(lower=lower, upper=upper, left=left, right=right, opleft=opleft, opright=opright))
+	}
+	
+	iv = function(y, group, x=NULL, event="LAST", stat="mean")
+	{
+		# Parameters:
+		# y:      target variable on which the Information Value of x is computed
+		# group:  group variable defining the different categories of x used to compute the Information Value
+		# x:      continuous variable for which the Information Value is computed (set it to NULL when x is categorical)
+		# event:  defines the event of interest for the WOE computation.
+		#         Either the "FIRST" or the "LAST" ordered value out of the two values taken by variable 'y'
+		#         is used at the numerator of the WOE formula: WOE = log(#Class1/#Class2)
+		#         When event = "LAST", Class1 is the LARGEST of the values
+		#         Otherwise, Class1 is the SMALLEST of the values
+		# Output: A data frame containing the following columns:
+		#         - group:  distinct categories of x used to compute the Information Value on y
+		#         - stat:   statistic value for each category when x is continuous or NA when x is NULL (meaning that the variable on which the Information Value is computed is categorical)
+		#         - woe:    Weight of Evidence for each category of x on y
+		#         - iv:     contribution to the total Information Value by the corresponding category of x.
+		#
 
-  ### EVENT
-  if (toupper(event) == "LAST") {
-    # The following variables indicate the column numbers of the #groups X 2 matrix stored in
-    # y.count.t[,2] below containing the counts of the level of y that should go in the numerator (class1)
-    # and in the denominator (class2) of the WOE formula given above.
-    class1 = 2
-    class2 = 1
-  } else {
-    class1 = 1
-    class2 = 2
-  }
-  #---------------------- Parse input parameters -------------------------
-  
-  # Count the occurrence of each class of Y by the values of group
-  # (Note that NA and NaN values in 'y' are removed with function is.na())
-  indok = !is.na(y)
-  y.count = aggregate(y[indok], by=list(y[indok],group[indok]), FUN=length)
-  y.count$newcol = y.levels[as.character(y.count$Group.1),] 
-    ## It is important the user of as.character() to correctly index the rows of the data frame y.levels!
+		#---------------------- Parse input parameters -------------------------
+		### TARGET
+		# Compute the levels of the target variable
+		y.levels = data.frame(order=1:nlevels(as.factor(y)), row.names=levels(as.factor(y)))
 
-  # Transpose by group value: I create a new data frame where the row names contain the values taken by the group value
-  # NOTE: I could have used the reshape() function to do this, which ALSO takes care of unexisting levels of the 
-  # target variable for some group values (unlike the t() transpose operator, whose result is explained below)
-  y.count.t = data.frame(row.names=levels(group), x.1=rep(0,nlevels(group)), x.2=rep(0,nlevels(group)))
-  # Transpose y.count by Group.2 to get y.count.t
-  for (i in 1:nrow(y.count)) {
-    y.count.t[as.character(y.count$Group.2[i]), y.count$newcol[i]] = y.count$x[i]
-      ## The as.character() function is again important in order to remove the 'factor' aspect of Group.2, o.w. there is an assignment error!
-  }
-  # NOTE: A possible other way to do the same is by using the transpose operator 't' applied on each value of Group.2 using the apply() function.
-  # HOWEVER, this does not work for 2 reasons:
-  # - When one of the levels of the 'y' variable is NOT present for one value of Group.2, the output has only 1 column instead of 2!
-  # (and this is not what we want!)
-  # - The transpose operator is NOT valid in R versions prior to R-2.11 as FUN can only return a scalar!!
-  # (see help(aggregate)) => this process does not work in R for SPSS 18.0.0 which requires R-2.8.0 to function.    
-  #y.count.t = aggregate(y.count$x, by=list(y.count$Group.2), FUN="t")
-  ## NOTE that the result stored in y.count.t using the aggregate() function is a #groups x 2 data frame
-  ## where the first column (named Group.1 --despite aggregating by Group.2 above)
-  ## contains the distinct group values and the second column is a (#groups x 2) matrix!
-  ## The matrix contains what we need to compute the WOE, i.e. the counts of each value of y by group.
-  ## The first column of such matrix contains the count of the LOWEST value of y.
-  ## The second column of the matrix contains the count of the LARGEST value of y.
-  
-  # Statistic value given in 'stat' for x on each group value
-  if (!is.null(x)) {
-    x.stat = aggregate(x, by=list(group), FUN=stat)
-    x.stat = x.stat$x
-  } else {
-    x.stat = NA
-  }
-  # WOE and IV contribution for each group value
-  count.classFIRST = y.count.t[,1]  # Count of the FIRST level of y (this is used to compute pctClassFIRST and pctClassLAST in the data frame returned by the function)
-  count.classLAST = y.count.t[,2]   # Count of the LAST level of y (this is used to compute pctClassFIRST and pctClassLAST in the data frame returned by the function)
-  count.class1 = y.count.t[,class1]
-  count.class2 = y.count.t[,class2]
-  count.total.class1 = sum(count.class1)
-  count.total.class2 = sum(count.class2)
-  # Note that I add 0.01 to the counts in class1 and class2 to avoid log(0) or divide by 0 when any of the counts is 0.
-  # Note however that, before applying this formula to the WOE, I check whether the total cases on each group value
-  # is different from 0 before computing the WOE because if there are no cases in a particular group value, the formula
-  # for the WOE would give a misleading value (= log(0.01/0.01) - log(count.total.class1/count.total.class2)), and
-  # instead the WOE --and also the IV for that group value-- should be undefined in that case (since there are no cases to evaluate the WOE!)
-  woe = ifelse(count.class1+count.class2==0, NA, log( (count.class1+0.01) / (count.class2+0.01) ) - log( count.total.class1 / count.total.class2 ))
-  iv = ifelse(count.class1+count.class2==0, 0, (count.class1/count.total.class1 - count.class2/count.total.class2) * woe)
-  
-  output = data.frame(group=rownames(y.count.t), stat=signif(x.stat, digits=4), nobs=count.class1+count.class2, pctClassFIRST=signif(count.classFIRST/(count.classFIRST+count.classLAST)*100, digits=3), pctClassLAST=signif(count.classLAST/(count.classFIRST+count.classLAST)*100, digits=3), woe=signif(woe, digits=4), iv=signif(iv, digits=4))
-  return(output)
-}
-#----- DEFINE AUXILIARY FUNCTIONS -----#  
+		### GROUP
+		# Just in case, eliminate not-observed levels of the factor variable GROUP (this is done by applying the factor() function to the variable)
+		group = factor(group)
+
+		### EVENT
+		if (toupper(event) == "LAST") {
+			# The following variables indicate the column numbers of the #groups X 2 matrix stored in
+			# y.count.t[,2] below containing the counts of the level of y that should go in the numerator (class1)
+			# and in the denominator (class2) of the WOE formula given above.
+			class1 = 2
+			class2 = 1
+		} else {
+			class1 = 1
+			class2 = 2
+		}
+		#---------------------- Parse input parameters -------------------------
+
+		# Count the occurrence of each class of Y by the values of group
+		# (Note that NA and NaN values in 'y' are removed with function is.na())
+		indok = !is.na(y)
+		y.count = aggregate(y[indok], by=list(y[indok],group[indok]), FUN=length)
+		y.count$newcol = y.levels[as.character(y.count$Group.1),] 
+			## It is important the user of as.character() to correctly index the rows of the data frame y.levels!
+
+		# Transpose by group value: I create a new data frame where the row names contain the values taken by the group value
+		# NOTE: I could have used the reshape() function to do this, which ALSO takes care of unexisting levels of the 
+		# target variable for some group values (unlike the t() transpose operator, whose result is explained below)
+		y.count.t = data.frame(row.names=levels(group), x.1=rep(0,nlevels(group)), x.2=rep(0,nlevels(group)))
+		# Transpose y.count by Group.2 to get y.count.t
+		for (i in 1:nrow(y.count)) {
+			y.count.t[as.character(y.count$Group.2[i]), y.count$newcol[i]] = y.count$x[i]
+				## The as.character() function is again important in order to remove the 'factor' aspect of Group.2, o.w. there is an assignment error!
+		}
+		# NOTE: A possible other way to do the same is by using the transpose operator 't' applied on each value of Group.2 using the apply() function.
+		# HOWEVER, this does not work for 2 reasons:
+		# - When one of the levels of the 'y' variable is NOT present for one value of Group.2, the output has only 1 column instead of 2!
+		# (and this is not what we want!)
+		# - The transpose operator is NOT valid in R versions prior to R-2.11 as FUN can only return a scalar!!
+		# (see help(aggregate)) => this process does not work in R for SPSS 18.0.0 which requires R-2.8.0 to function.    
+		#y.count.t = aggregate(y.count$x, by=list(y.count$Group.2), FUN="t")
+		## NOTE that the result stored in y.count.t using the aggregate() function is a #groups x 2 data frame
+		## where the first column (named Group.1 --despite aggregating by Group.2 above)
+		## contains the distinct group values and the second column is a (#groups x 2) matrix!
+		## The matrix contains what we need to compute the WOE, i.e. the counts of each value of y by group.
+		## The first column of such matrix contains the count of the LOWEST value of y.
+		## The second column of the matrix contains the count of the LARGEST value of y.
+
+		# Statistic value given in 'stat' for x on each group value
+		if (!is.null(x)) {
+			x.stat = aggregate(x, by=list(group), FUN=stat)
+			x.stat = x.stat$x
+		} else {
+			x.stat = NA
+		}
+		# WOE and IV contribution for each group value
+		count.classFIRST = y.count.t[,1]  # Count of the FIRST level of y (this is used to compute pctClassFIRST and pctClassLAST in the data frame returned by the function)
+		count.classLAST = y.count.t[,2]   # Count of the LAST level of y (this is used to compute pctClassFIRST and pctClassLAST in the data frame returned by the function)
+		count.class1 = y.count.t[,class1]
+		count.class2 = y.count.t[,class2]
+		count.total.class1 = sum(count.class1)
+		count.total.class2 = sum(count.class2)
+		# Note that I add 0.01 to the counts in class1 and class2 to avoid log(0) or divide by 0 when any of the counts is 0.
+		# Note however that, before applying this formula to the WOE, I check whether the total cases on each group value
+		# is different from 0 before computing the WOE because if there are no cases in a particular group value, the formula
+		# for the WOE would give a misleading value (= log(0.01/0.01) - log(count.total.class1/count.total.class2)), and
+		# instead the WOE --and also the IV for that group value-- should be undefined in that case (since there are no cases to evaluate the WOE!)
+		woe = ifelse(count.class1+count.class2==0, NA, log( (count.class1+0.01) / (count.class2+0.01) ) - log( count.total.class1 / count.total.class2 ))
+		iv = ifelse(count.class1+count.class2==0, 0, (count.class1/count.total.class1 - count.class2/count.total.class2) * woe)
+
+		output = data.frame(group=rownames(y.count.t), stat=signif(x.stat, digits=4), nobs=count.class1+count.class2, pctClassFIRST=signif(count.classFIRST/(count.classFIRST+count.classLAST)*100, digits=3), pctClassLAST=signif(count.classLAST/(count.classFIRST+count.classLAST)*100, digits=3), woe=signif(woe, digits=4), iv=signif(iv, digits=4))
+		return(output)
+	}
+	#----- DEFINE AUXILIARY FUNCTIONS -----#  
   
   #------------------------------- Parse input parameters -------------------------------------
   ### TARGET
@@ -1701,11 +1740,19 @@ iv = function(y, group, x=NULL, event="LAST", stat="mean") {
   # unless 'breaks' is NOT NULL in which case the values given in breaks are used for binning
   i = 0
   lastrow = 0
+  # Store the var types (character or numeric) in a list (used at least for the SPSS code generation)
+  # Note that this information needs to be stored in a list (and not an array) because it's need to be indexed by the variable names!
+  # (since the order of processing of the variables may be different from the one defined by the array c(varclass, varnum)!
+  vartypes = list()
   cat("Information Value calculation on target variable", targetname, "\n")
   for (v in varclass) {
     i = i + 1
     cat("\t", i, ": Computing Information Value for categorical variable", v, "\n")
     
+    # Store the variable type (character or numeric)
+    # THIS IS VERY COMPLICATED TO DO SO I STORED THE PROCESS IN A FUNCTION!!
+		vartypes[[v]] = getVarType(data[,v])
+
     # Number of levels in the categorical variable
     # First replace NA values with NaN so that missing values are considered as a possible value in the computation of the Information Value
     # Note that NaN values are considered as valid values of the BY variables in the aggregate() function used in the iv() function above,
@@ -1736,7 +1783,11 @@ iv = function(y, group, x=NULL, event="LAST", stat="mean") {
   for (v in varnum) {
     i = i + 1
     cat("\t", i, ": Computing Information Value for continuous variable", v, "\n")
-    
+
+    # Store the variable type (character or numeric)
+    # THIS IS VERY COMPLICATED TO DO SO I STORED THE PROCESS IN A FUNCTION!!
+		vartypes[[v]] = getVarType(data[,v])
+
     # Compute the number of levels in the categorized continuous variable
     checkGroups = FALSE
     	## This variable specifies whether the frequency of the groups obtained using cut() below should be checked for any of the groups being too small.
@@ -1833,7 +1884,73 @@ iv = function(y, group, x=NULL, event="LAST", stat="mean") {
   # Note that a new column called "row.names" is added as first column giving the original order of the rows! (nice!)
   IV = IV[order(IV$IV, decreasing=TRUE),]
   
-  return(list(WOE=WOE, IV=IV))
+  # Create SPSS code for creating WOE variables
+  if (spsscode) {
+  	SPSS = matrix(nrow=nrow(WOE)-sum(WOE$var=="--TOTAL--"), ncol=1, data="")
+  	bin = 1			# Counter of the bins or groups within each variable
+  	ii = 1			# output index (used for matrix SPSS)
+  	imax = nrow(WOE)
+  	for (i in 1:imax) {
+  		vname = WOE$var[i]												# Variable name
+  		newvname = paste("woe_", vname, sep="")		# Variable name for the WOE variable
+  		vtype = vartypes[[vname]]									# Variable type: character or numeric
+  		type = WOE$type[i]												# Type of variable: categorical or continuous
+  		group = WOE$group[i]											# Group or bin that is currently analyzed
+  		nextgroup = ""; if (i < imax) { nextgroup = WOE$group[i+1] }
+  		# 1.- Check if this is an actual group
+  		if (is.na(group)) {	# NA indicates that a new variable starts (since it is used as separator among variables in the WOE table)
+  			bin = 1
+  		} else {
+  			# 2.- Check if this group is a Missing value in the original variable
+  			if (group == "NaN") {
+		  		expr = paste("if ( missing(", vname, ") )", newvname, "=", WOE$woe[i], ".")
+  			} else {
+  				# 3.- Check if the current variable is categorical
+  				if (type == "categorical") {
+  					# Simple equal comparison
+  					# 4.- Check if the current variable is character
+  					if (vtype == "character") {
+	  					expr = paste("if (", vname, "=", paste("'",trim(group),"'",sep=""), ")", newvname, "=", WOE$woe[i], ".")
+	  				} else {
+	  					expr = paste("if (", vname, "=", group, ")", newvname, "=", WOE$woe[i], ".")
+	  				} # (4)
+  				} else {
+						# Get the numeric bounds of the current group
+						bounds = getBounds(group)
+						# 5.- Check if:
+						#			- the last group of the variable (nextgroup==NA) OR
+						#			- this is the very last group (nextgroup=="") OR
+						#			- the next group is Missing (nextgroup=="NaN")
+						if (is.na(nextgroup) || nextgroup %in% c("", "NaN")) {
+							# No upper bound on the condition
+							expr = paste("if (", bounds$lower, bounds$opleft, vname, ")", newvname, "=", WOE$woe[i], ".")
+						} else {
+							# 6.- Check if this is the first group of the variable
+							if (bin == 1) {
+								# No lower bound on the condition
+								expr = paste("if (", vname, bounds$opright, bounds$upper, ")", newvname, "=", WOE$woe[i], ".")
+							} else {
+								# Both lower and upper bound on the condition
+								expr = paste("if (", bounds$lower, bounds$opleft, vname, " and ", vname, bounds$opright, bounds$upper, ")", newvname, "=", WOE$woe[i], ".")
+							} # (6)
+						} # (5)
+					} # (3)
+				} # (2)
+				# Store the SPSS expression
+				SPSS[ii] = expr
+				# Go to the next group or bin
+		  	bin = bin + 1
+		  	# Increase the output index (used for matrix SPSS)
+		  	ii = ii + 1
+  		} # (1)
+  	}
+  }
+
+	if (spsscode) {
+	  return(list(WOE=WOE, IV=IV, SPSS=SPSS))
+	} else {
+	  return(list(WOE=WOE, IV=IV))
+	}
 }
 ######################################## InformationValue #####################################
 

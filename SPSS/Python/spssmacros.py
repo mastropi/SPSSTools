@@ -227,6 +227,13 @@ __all__ = [ "RemoveNamesFromList",
 #           to remove a name when it is found in the original list. The 'remove' method is case sensitive and
 #           this is why I need to first convert all names in 'names' and in 'list' to UPPER case before searching
 #           the names in the list when the search is case-sensitive.
+#
+#           (2014/07/24)
+#           - Replaced the call to spssaux._buildvarlist() with the call to my function dmspssaux.BuildVarListAndString().
+#           This was done in order to avoid having to keep track whether a list of names (given as a string with one name per line)
+#           has an empty string at the beginning and at the end.
+#           This change implies that every empty line in a list of names (given as a string) are removed after calling
+#           RemoveNamesFromList().
 def RemoveNamesFromList(list=(), names=(), casesensitive=True, outcase=None, outsep="\n", outformat="string", log=True):
     """Removes a set of names from a list and returns a string of the remaining names separated by 'outsep'.
     The function returns a string containing the names in 'list' that are NOT in 'names'.
@@ -265,10 +272,10 @@ def RemoveNamesFromList(list=(), names=(), casesensitive=True, outcase=None, out
 
     #----------------------------------- Parse input parameters -------------------------------
     #-- LIST
-    list0 = spssaux._buildvarlist(list)
+    list0, dummy = BuildVarListAndString(list)
 
     #-- NAMES
-    names = spssaux._buildvarlist(names)
+    names, dummy = BuildVarListAndString(names)
     if len(names) == 0:
         names = ['']
 
@@ -2477,8 +2484,8 @@ def TransformPercent(
                             If this is an expression, whenever the keyword 'var' appears in it, its value is replaced
                             by the actual variable that is being processed at the moment.
                             Ex: miss = "((var>0)-(var<0))*100"
-                            defines the 'missing' value as +100 or -100 depending on the sign of the variable
-                            being processed)
+                            defines the 'missing' value as +100, 0 or -100 depending on the sign of the variable
+                            being processed). Note that when the numerator is also 0, the 'missing' value is also 0.
                             Default: 0
     numConditionMiss:       Condition to be satisfied by the numerator variable in order to set the result of the
                             percent operation to the value given in parameter 'miss' when the denominator variable
@@ -2572,7 +2579,7 @@ def TransformPercent(
             if sreplace:
                 pvar = prefix + var[len(prefix):len(var)-len(suffix)] + suffix
             else:
-                pvar = prefix + var[len(prefix):]
+                pvar = prefix + var[len(prefix):] + suffix
         else:
             if sreplace:
                 pvar = prefix + var[:len(var)-len(suffix)] + suffix
@@ -2590,7 +2597,7 @@ def TransformPercent(
             missvalue = 0
 
         submitstr = r"""
-do if not(%(den)s = 0) and not(%(denConditionMiss)s).
+do if not(%(den)s = 0)""" + (denConditionMiss and " and not(%(denConditionMiss)s)" or "") + r""".
 + compute %(pvar)s = %(var)s / %(den)s * 100.
 """
         if numConditionMiss:

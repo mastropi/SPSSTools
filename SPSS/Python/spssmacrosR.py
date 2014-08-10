@@ -29,6 +29,8 @@ Author: Daniel Mastropietro"""
 # [DONE-2013/12/11: RCopyVariables() function]
 #   2013/08/05: Create a function that copies Python variables into R. Use the BEGIN PROGRAM R inside the PYTHON program to do it and create a syntax that parses
 #             the variables to Python variables to copy.
+# 2014/07/28: Crate a function that copies R variables to Python or to SPSS. Use the BEGIN PROGRAM R inside a PYTHON program that generates a temporary SPSS
+#             from which Python can read the value using a dataStep(). However I am thinking whether some XML functionality would also do the trick...
 #
 
 # Some writing standards:
@@ -208,9 +210,12 @@ def RCopyVariables(**kwargs):
     for varR in keys:
         i = i + 1
         varPythonValue = kwargs[varR]
-        # Remove any initial or final empty line (otherwise the value is not correctly assigned in R)
-        varPythonValueList, varPythonValue = BuildVarListAndString(varPythonValue)
         isString = isinstance(varPythonValue,str)
+        if isString:
+            # When string, remove any initial or final empty line (otherwise the value is not correctly assigned in R)
+            # NOTE: BuildVarListAndString ONLY accepts sequences or STRING variables (no numeric variables) and this is due to the call
+            # to spssaux._buildvarlist() function which accepts only the aforementioned types as argument (see documentation).
+            varPythonValueList, varPythonValue = BuildVarListAndString(varPythonValue)
         print "Copying Python variable " + str(i) + " to R as '" + varR + "'"
         syntaxR = syntaxR + "\n" + varR + " = " + (isString and "'" or "") + str(varPythonValue) + (isString and "'" or "") + r"""
 # For string variables, remove any starting and ending new lines in order to avoid generating empty variable names
