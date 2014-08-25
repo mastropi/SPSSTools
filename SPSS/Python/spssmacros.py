@@ -539,9 +539,6 @@ def MissingValues(
 
     # Read the SPSS data into a matrix (only read variables listed in parameter VARS)
     datapy = spssdata.Spssdata(indexes=varlist)
-    ## NEED TO FIND OUT IF IT IS POSSIBLE TO VERIFY THE EXISTENCE OF VARIABLE VARS BEFORE READING IT, BECAUSE
-    ## IF THEY DON'T EXIST THEN THERE IS AN ERROR. I checked in packages spss and spssdata but I didn't find anything yet.
-    ## (2013/08/01) YES, there is a way: use the spss.Dataset and spss.VarList classes (see TODO section at the top of this file)
 
     # Compute the number of zeros and missing values in each variable and store it in a matrix (FREQ)
     n = spss.GetCaseCount()         # Number of cases in the active dataset

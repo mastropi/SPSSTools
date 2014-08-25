@@ -1524,9 +1524,9 @@ if (save) {
 InformationValue = function(
   data,             # Dataset containing the variables to analyze listed in 'vars', 'varclass' and/or 'varnum
   target,           # Either an unquoted variable name or a string indicating the name of the binary target variable in 'data' on which the Information Value is computed
-  vars=NULL,        # Blank-separated string with the names of the variables to analyze (they are assumed to be continuous)
-  varclass=NULL,    # Blank-separated string with the names of the CATEGORICAL variables to analyze
-  varnum=NULL,      # Blank-separated string with the names of the CONTINUOUS  variables to analyze (these variables together with those specified in VARS determine the continuous variables to analyze)
+  vars=NULL,        # Blank- or line-separated string with the names of the variables to analyze (they are assumed to be continuous)
+  varclass=NULL,    # Blank- or line-separated string with the names of the CATEGORICAL variables to analyze
+  varnum=NULL,      # Blank- or line-separated string with the names of the CONTINUOUS  variables to analyze (these variables together with those specified in VARS determine the continuous variables to analyze)
   groups=20,        # Number of groups into which the continuous variables are binned (equal-size bins)
   breaks=NULL,      # Vector defining the upper boundaries of the bins into which ALL CONTINUOUS variables are binned
   stat="mean",      # Statistic to compute on each bin of the analyzed continuous variables

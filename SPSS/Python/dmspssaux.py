@@ -1,6 +1,6 @@
 """This module contains AUXILIARY Python functions to be used in SPSS >18.0.0.
 Up to 14-Feb-2014 these functions were used by spssmacros.aux and/or DMSpssMining.py.
-After this date new functions may have been added that are not called by those modules.
+After this date new functions may have been added to the dmspssaux.py module that are not called by the aforementioned modules.
 Author: Daniel Mastropietro"""
 
 # HISTORY:

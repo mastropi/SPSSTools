@@ -1,3 +1,13 @@
+File that documents the changes on the Python and R tools available at NAT
+--------------------------------------------------------------------------
+Created: 05-Apr-2014
+Note: Each entry is a comment used when committing the changes in Git
+
+LEGEND:
+- COMMITTED: changes commited in Git
+- DEPLOYED: version uploaded and deployed to the NAT server at the Software\Tools directory. (This keyword started in Aug-2014)
+
+
 commit of Tools: 2014/03/28 - 2014/04/05 [COMMITTED]
 ----------------------------------------
 datamining-functions.r:
@@ -96,7 +106,7 @@ datamining-functions.r:
 	- GroupCategories(), roc(): replaced paste0() with paste() because paste0() does not exist in version R-2.8.0 used in SPSS.
 
 
-commit of Tools: 2014/05/22 - 2014/08/10 [COMMITED]
+commit of Tools: 2014/05/22 - 2014/08/10 [COMMITED AND DEPLOYED]
 ----------------------------------------
 Two new R functions. Updates in R & Python.
 
@@ -128,3 +138,18 @@ spssmacros.py:
 spssmacrosR.py:
 - Updated functions:
 	- RCopyVariables(): Did an easy fix so that also numeric variables can be copied to R. Before this fix, only string variables could be copied because of a limitation that the BuildVarListAndString() function accepts only sequences and STRING variables (due to its call to spssaux._buildvarlist() function which only accepts the aforementioned types of variables).
+
+commit of Tools: 2014/08/11 - 2014/08/25 [COMMITED AND DEPLOYED]
+----------------------------------------
+spssmacrosR.py now imports dmspssaux.py
+
+dmspssaux.py:
+- Better clarified the module description at the top.
+- Note that the StartClient_.py script --run at SPSS startup-- now imports the dmspssaux.py module so that the user can directly call functions such as CheckVariables() or Save(), that are defined therein. Note that these functions are not available when importing dmspssaux.py from within spssmacros.py and spssmacrosR.py.
+
+spssmacros.py:
+- Changed comments.
+
+spssmacrosR.py:
+- Removed functions:
+	- BuildVarListAndString(): This function was also defined in dmspssaux.py and is now imported from that module, as is the case with spssmacros.py.

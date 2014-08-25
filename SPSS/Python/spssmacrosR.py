@@ -49,84 +49,16 @@ import spssdata
 ### My imports
 # Global variables used in this code (e.g. tempdir_, Rdir_)
 from natglobals import *
+# Import auxiliay functions
+from dmspssaux import BuildVarListAndString
+
 
 # List of functions defined
-__all__ = [ "BuildVarListAndString",
-            "RSource",
+__all__ = [ "RSource",
             "RLibPath",
             "RCopyVariables",
             "RDistributionsByGroup",
             ]
-
-
-################################### Auxiliary functions #######################################
-# Function taken from spssmacros. Note that I copy it here instead of importing it because of the way I distribute these Python
-# modules in Nat: I copy the module to the "production" directory and there I change its name! Therefore I cannot really import the spssmacros module...
-# Function to parse input parameters that can be strings, lists or tuples, similar to spssaux._buildvarlist but with the
-# following added functionalities:
-# - it removes blank spaces or empty lines at the beginning or end of parameter 'vars' that would otherwise be considered as
-# an empty variable name.
-# - if requested, it dedups the list of names passed in 'vars' (by keeping its original order!)
-# - it removes blank spaces at the beginning or end of each identified variable name
-def BuildVarListAndString(vars, sort=False, dedup=True):
-    # Convert the variable names to a list (in case they are not a list already)
-    varlist = spssaux._buildvarlist(vars)
-
-    # Check if the output returned by _buildvarlist() is a VariableDict object (which is one of the possible outputs, as stated
-    # in the comments of the function in the spssaux module), in which case we first need to retrieve the list of variables
-    # from the dictionary.
-    # Note: If we want to access the keys in the dictionary we first need to call the attribute 'vdict'. In fact, although
-    # the VariableDict class is a dictionary, for some reason it is not a regular Python dictionary. I found this out by looking
-    # into the code defining the VariableDict class in the spssaux module, where I saw the call to self.vdict.keys() in method
-    # variablesf, and that's how I learn the way they retrieved the keys of the dictionary. Apart from this, I didn't see
-    # where vdict is defined (for instance, it is NOT defined in the spssaux module, perhaps it is defined in some other module
-    # imported by spssaux...?)
-    if isinstance(varlist, spssaux.VariableDict):
-        varlist = varlist.variables
-        ## Note that this method is incorrectly documented in Raynald's guide for programmability in SPSS(!)
-        ## where he says that the way to retrieve the variable list is by using the *method* 'Variables()', but this
-        ## method does NOT exist.
-        ## (probably his document is valid for an older version of spssaux since its dated 2007...)
-
-    # If no sort and dedup are requested, remove duplicates by keeping the order in which the variables are passed
-    if not(sort) and dedup:
-        varlistOrig = varlist
-        # Remove duplicates
-        varlist = [v for v in set(varlist)]
-        # Get the order of the variables in the original list
-        # (doing this in the way I do it here implies that the position of any duplicated variable in the original list is given by its first occurence)
-        indices = map(varlistOrig.index, varlist)
-        # Restore the original order of the variables
-        indices.sort()
-        # Re-create the list with no duplicates in the original order
-        varlist = [varlistOrig[i] for i in indices]
-    else:
-        if dedup:
-            # Remove duplicates
-            varlist = [v for v in set(varlist)]
-        if sort:
-            # Sort the list if requested
-            varlist.sort()
-
-    # Create variable list as a new-line-separated string and removes any blank spaces before or after its name
-    # Note that I explicitly convert each element of 'varlist' to string in case the values in vars are numbers  (e.g. percentiles list as passed to Summary())
-    # o.w. I get an error when applying the strip() function.
-    vars = "\n".join(map(str,varlist)).strip()
-    # Re-create the varlist after stripping each variable name from any blank spaces.
-    # This process also creates a list of names where no variable is empty (e.g. coming from an empty line in the original parameter 'vars' when passed as string)
-    varlist = vars.split()
-    # Try converting the values to numbers (integers first, then float) in case they are originally numbers (e.g. percentiles list passed in Summary()).
-    # If the conversion does not succeed, leave the values as strings.
-    try:
-        varlist = map(int, varlist)     # This fails when the value stored as string is a real number (e.g. float)
-    except:
-        try:
-            varlist = map(float, varlist)
-        except:
-            pass
-
-    return varlist, vars
-################################### Auxiliary functions #######################################
 
 
 ########################## Auxiliary Python functions that execute R code #################################

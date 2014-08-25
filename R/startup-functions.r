@@ -43,6 +43,9 @@
 # - [DONE-2013/08/05: Function checkVariables()] 2013/08/02: Write a function to check the existence of variables in a dataset so that the user knows which variables are NOT found when passed as parameters
 # - 2014/07/09: In ALL plotting functions, add the functionality to transform any of the variables plotted by the safe log function. Note that this
 # may not be so easily done because this wish may be different for each plotted variable, which is especially so when doing pairs plot.
+# - 2014/08/25: It seems that using list(...) it is possible to read the parameters passed as part of the ... input parameters section! Try using this
+# method instead of match.call() when parsing input parameters.
+#
 
 # Necessary Libraries
 require(gdata)		# For rename.vars() etc. (used at least in plot.binned) (note: gdata also has a trim() function to remove leading and trailing blanks in strings)
