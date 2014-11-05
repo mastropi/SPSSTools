@@ -2443,7 +2443,7 @@ def TransformPercent(
     min=None,
     max=None,
     miss=0,
-    numConditionMiss=None,
+    numConditionMiss="var = 0",
     denConditionMiss=None,
     prefix="P_",
     suffix=None,
@@ -2492,7 +2492,7 @@ def TransformPercent(
                             Ex: "var = 0" (only when the numerator variable is 0 is the resulting
                             percent variable set to the value or expression given in 'miss' --whenever the denominator
                             variable is also 0 or satisfies the condition given in 'denConditionMiss')
-                            Default: None
+                            Default: "var = 0"
     denConditionMiss:       Additional condition to be satisfied by the denominator variable specified in 'den'
                             (besides the condition 'den = 0') in order to set the result of the percent operation
                             to the value given in 'miss' (as long as the condition specified in parameter 'numConditionMiss'
@@ -2599,9 +2599,12 @@ do if not(%(den)s = 0)""" + (denConditionMiss and " and not(%(denConditionMiss)s
 """
         if numConditionMiss:
             #-- Replace 'var' with %(var)s and 'den' with %(den)s so that the condition is applied on the actual variables being processed (indicated in parameters 'var' and 'den')
-            numConditionMiss = numConditionMiss.lower().replace("var","%(var)s") %locals()
-            numConditionMiss = numConditionMiss.lower().replace("den","%(den)s") %locals()
-            submitstr = submitstr + r"""else if %(numConditionMiss)s.
+            #-- (note that I need to store the output of the replacement in ANOTHER VARIABLE (numConditionMissExp --Exp = Expression)
+            #-- because otherwise the numConditionMiss will no longer have the "var" keyword for the next iteration and will therefore
+            #-- refer to the same variable (i.e. the first variable in 'varlist') for all iterations!! (definitely NOT what we want)
+            numConditionMissExp = numConditionMiss.lower().replace("den","%(den)s") %locals()
+            numConditionMissExp = numConditionMissExp.lower().replace("var","%(var)s") %locals()
+            submitstr = submitstr + r"""else if %(numConditionMissExp)s.
 + compute %(pvar)s = %(missvalue)s.
 else.
 + compute %(pvar)s = $SYSMIS.

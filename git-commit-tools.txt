@@ -153,3 +153,22 @@ spssmacros.py:
 spssmacrosR.py:
 - Removed functions:
 	- BuildVarListAndString(): This function was also defined in dmspssaux.py and is now imported from that module, as is the case with spssmacros.py.
+
+startup-functions.r, datamining-functions.r:
+- Enhanced comments.
+
+commit of Tools: 2014/08/25 - 2014/11/04 [COMMITTED]
+----------------------------------------
+Updated spssmacros.TransformPercent and StartClient_.py
+
+spssmacros.py:
+- Updated functions:
+	- TransformPercent():
+		- Fixed a bug regarding the use of the numConditionMiss parameter (it used the first variable in vars for all percent computations!)
+		- Changed default value of numConditionMiss from None to 0, so that by default the percent variable is set to 0 only when BOTH the numerator and denominator variables are 0.
+
+	- StartClient_.py script:
+		- Although this file is not in the project, I changed it in the Software\Tools network location in order to set the SPSS locale to English.
+		This is done to avoid problems with the decimal point separator in values coming from Python, as happens in ModelCollin() function when reading data from Python using a BEGIN-END DATA block in SPSS (which expects the comma separator when the locale is set to Spanish).
+		- Note that I did NOT change my local copy of the file, since my locale is set to English Ireland (en_IE) and I don't want to change this.
+
