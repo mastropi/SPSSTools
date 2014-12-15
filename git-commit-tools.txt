@@ -106,7 +106,7 @@ datamining-functions.r:
 	- GroupCategories(), roc(): replaced paste0() with paste() because paste0() does not exist in version R-2.8.0 used in SPSS.
 
 
-commit of Tools: 2014/05/22 - 2014/08/10 [COMMITED AND DEPLOYED]
+commit of Tools: 2014/05/22 - 2014/08/10 [COMMITTED AND DEPLOYED]
 ----------------------------------------
 Two new R functions. Updates in R & Python.
 
@@ -172,3 +172,18 @@ spssmacros.py:
 		This is done to avoid problems with the decimal point separator in values coming from Python, as happens in ModelCollin() function when reading data from Python using a BEGIN-END DATA block in SPSS (which expects the comma separator when the locale is set to Spanish).
 		- Note that I did NOT change my local copy of the file, since my locale is set to English Ireland (en_IE) and I don't want to change this.
 
+commit of Tools: 2014/11/05 - 2014/12/15 [COMMITTED AND DEPLOYED]
+----------------------------------------
+startup-functions.r: extract(); dmspssaux.py: Save()
+
+startup-functions.r:
+- Renamed functions:
+	- midpoints() -> extract()
+- Updated functions:
+	- extract(): (the old midpoints() function)
+		- Extended this function to return the midpoint, lower value or upper value of intervals like those returned by the cut() function. Until now, the function returned only the midpoints.
+
+dmspssaux.py:
+- Updated functions:
+	- Save():
+		- Extended the functionality so that "any" format other than "SAV" is saved using SAVE TRANSLATE. I enclose "any" in quotes because this was only tested with format="XLS" and format="CSV". Note that before I was only able to save in format="XLS", so the CSV format was now added.

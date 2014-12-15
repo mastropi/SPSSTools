@@ -10,6 +10,8 @@ Author: Daniel Mastropietro"""
 #             the RDistributionsByGroup() function when parsing the value of parameter 'transforms' which may have duplicates
 #             (since it does NOT contain a variable list but a set of transformation to apply to the variables, which may be the same
 #             for different variables!)
+# 2014/12/12: Extended Save() to save translate to "any" type of format.
+#             I didn't do much, I just changed the condition "format.lower() == 'xls'" with "format.lower() <> 'sav'".
 #
 
 import spss
@@ -242,7 +244,7 @@ def Save(data=None, out=None, format="sav", dir=None):
         out = data
     outfile = dir + "/" + out + "." + format
 
-    if format.lower() == "xls":
+    if format.lower() <> "sav":
         spss.Submit(r"""
 save translate outfile = '%(outfile)s'
 /type=%(format)s

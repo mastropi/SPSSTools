@@ -182,6 +182,7 @@ from natglobals import *
 # Import auxiliay functions
 from dmspssaux import CheckVariables, BuildVarListAndString, Save
 
+# Define the symbols that are exported when running import *
 __all__ = [ "RemoveNamesFromList",
             "MissingValues",
             "Summary",

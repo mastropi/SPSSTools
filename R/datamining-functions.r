@@ -2301,7 +2301,8 @@ ModelFit <- model.fit <- function(dat, target="y", score="p", vars="p", groups=2
 		cat("Analyzing variable", i, "of", length(vars), ":", v, "...\n")
 
 		# LEFT PLOT (y has the ORIGINAL scale of the y variable)
-#		plot.binned(dat[,v], target, pred=score, groups=groups, title=v, ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=print, ...)
+		# This is what we plot below to the do.call() call to plot.binned():
+		# plot.binned(dat[,v], target, pred=score, groups=groups, title=v, ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=print, ...)
 		# Set the parameter list to be used for the function call to plot.binned()
 		paramsList$x = substitute(dat[,v])	# NOTE the use of substitute() in order to pass the variable NAME and NOT its value (this is important to avoid problems when using deparse(substitute(x)) inside the function being called (which assumes that x contains a variable NAME and not its values!!)
 		paramsList$title = v
@@ -2312,7 +2313,8 @@ ModelFit <- model.fit <- function(dat, target="y", score="p", vars="p", groups=2
 		if (legend) legend("top", legend=c("observed mean", "predicted mean", "lm fit", "loess fit"), pch=c(21,NA,NA,NA), lty=c(NA,1,2,1), lwd=c(NA,2,2,2), col=c("black", "red", "blue", "green"), pt.bg=c("light blue",NA,NA,NA), pt.cex=c(1.2,NA,NA,NA), cex=0.6)
 
 		# RIGHT PLOT (y has the NEW scale of the y variable --after binning)
-#		plot.binned(dat[,v], target, pred=score, groups=groups, title=v, xlim="new", ylim="new", ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=print, ...)
+		# This is what we plot below to the do.call() call to plot.binned():
+		# plot.binned(dat[,v], target, pred=score, groups=groups, title=v, xlim="new", ylim="new", ylab="", col="light blue", col.pred="red", col.lm="blue", col.loess="green", print=print, ...)
 		# Update the parameter list to be used for the function call to plot.binned()
 		paramsList$xlim = "new"
 		paramsList$ylim = "new"
@@ -2438,7 +2440,7 @@ roc <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.type 
   #   roc(clase ~ prob, mod1)
   #   roc(clase ~ prob, mod2, pos = 2)
   #   roc(clase ~ prob, mod2, pos = 3)
-  # donde mod1, mod2 y mod3 son dfs con clase y probabilidad predicha...
+  # donde mod1, mod2 y mod3 son dfs con las variables 'clase' (valor observado del target) y 'prob' (probabilidad predicha de clase 1)
 {
   df <- model.frame(formula, data)
   colnames(df) <- c('clase', 'pm')

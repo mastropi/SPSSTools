@@ -273,13 +273,23 @@ parseVariable <- parse.variable <- function(dat, var)
 	return(var)
 }
 
-# Return the mid point of intervals returned by cut()
+# Extract the mid point, lower value or upper value of open, closed, semi-open intervals like those returned by the cut() function.
 # Taken from an e-mail received from R-Bloggers on 24-May-2014, originally published on Matt's Stats and stuff (not saved)
-midpoints <- function(x, digits=2)
+extract <- function(intervals, digits=2, what=c("midpoint", "lower", "upper"))
 {
-	lower <- as.numeric(gsub(",.*","",gsub("\\(|\\[|\\)|\\]","", x)))
-	upper <- as.numeric(gsub(".*,","",gsub("\\(|\\[|\\)|\\]","", x)))
-	return(round(lower+(upper-lower)/2, digits))
+	# Parse input parameters
+	what = match.arg(what) 
+	
+	# Parse x
+	lower = as.numeric(gsub(",.*","",gsub("\\(|\\[|\\)|\\]","", intervals)))
+	upper = as.numeric(gsub(".*,","",gsub("\\(|\\[|\\)|\\]","", intervals)))
+	
+	# Define the output value
+	out =	switch (tolower(what),
+								midpoint 	= round(lower+(upper-lower)/2, digits),
+								lower			= round(lower, digits),
+								upper			= round(upper, digits))
+	return(out)
 }
 
 # List the names of the variables existing in an environment in a matrix-like form
@@ -477,6 +487,7 @@ logitInv = function(x, adjust=0)
 # where padj = p*(1-2*adj) + adj, linear mapping from [0,1] to [adj,1-adj]
 # Note: This was verified by intuition and comparing the output from logit() with my own
 # computation as described above.
+# Note that there is an inverse logit function also in the gtools package.
 {
 	y = 1/(1+exp(-x))
 	yadj = (y - adjust)/(1-2*adjust)

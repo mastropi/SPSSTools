@@ -52,8 +52,7 @@ from natglobals import *
 # Import auxiliay functions
 from dmspssaux import BuildVarListAndString
 
-
-# List of functions defined
+# Define the symbols that are exported when running import *
 __all__ = [ "RSource",
             "RLibPath",
             "RCopyVariables",
