@@ -1,6 +1,6 @@
 # startup-functions.r
 # Created:      July 2008
-# Modified:     31-Jul-2014
+# Modified:     31-Jan-2015
 # Author:       Daniel Mastropietro
 # Description: 	Startup settings to be invoked when R starts
 # R version:    R-2.8.0 (used in SPSS 18.0.0 @NAT starting 2013)
@@ -1880,12 +1880,16 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
 }
 
 # plot.cdf: Plot CDF of a numeric variable
-plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
+plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, reverse=FALSE, ...)
 # Created:      12-Mar-2014
 # Modified:     12-Mar-2014
 # Description:  Plot CDF of a numeric variable in the quantiles specified in parameter 'probs'
 # Details:			The parameter probs corresponds to the parameter of the same name in function quantile()
-# Parameters:   x: A numeric array (missing values are accepted and a warning is shown in that case)
+# Parameters:   x: 				A numeric array (missing values are accepted and a warning is shown in that case)
+#								probs: 		Array of values between 0 and 1 defining the quantiles of x to compute.
+#								add: 			Flag indicating whether to add the plot to an existing plot.
+#								reverse:	Whether to compute the CDF on the reversed value of x (i.e. larger values of x correspond to smaller quantiles)
+#								...:			Additional parameters passed to the plot() function.
 # Output:       A matrix containing the CDF of x where the row names are the quantile values defined in 'probs'.
 # Assumptions:  None
 #
@@ -1900,6 +1904,8 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
   call = match.call()
   # Put all calling parameters into a parameter list
   paramsList = as.list(call)
+  # Get the parameters and its values passed as part of ...
+  optionsList = list(...)
   # Remove the function name from the parameter list
   paramsList[[1]] = NULL
 
@@ -1940,12 +1946,22 @@ plot.cdf = function(x, probs=seq(0,1,0.01), add=FALSE, ...)
 
   # Construct the CDF values to plot on the vertical axis from the names of the x.dist array
 	cdf.values = as.numeric(gsub("%","",names(x.cdf)))
+	if (reverse) cdf.values = 100 - cdf.values
 	
 	# Update paramsList for a proper call to plot() below
 	paramsList$x = x.cdf
 	paramsList$y = cdf.values
 	paramsList$probs = NULL
 	paramsList$add = NULL
+	if (reverse) {
+		if (is.null(paramsList$xlim)) {
+			paramsList$xlim = rev(range(x.cdf))
+		} else {
+			paramsList$xlim = rev(optionsList$xlim)	# NOTE that here we need to use optionsList$xlim and NOT paramsList$xlim because the latter has text value (e.g. "c(0,1)")!!
+		}
+		# Remove 'reverse' from paramsList because I don't want to pass it to plot()
+		paramsList$reverse = NULL
+	}
 	par(new=add)
 	# Use do.call() to mimic the following plot:
 	# plot(x.cdf, cdf.values, type=type, xlab=xlab, ylab=ylab, xaxt=xaxt, yaxt=yaxt, main=main, ...)

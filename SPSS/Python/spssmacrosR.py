@@ -27,10 +27,31 @@ Author: Daniel Mastropietro"""
 
 # TODO:
 # [DONE-2013/12/11: RCopyVariables() function]
-#   2013/08/05: Create a function that copies Python variables into R. Use the BEGIN PROGRAM R inside the PYTHON program to do it and create a syntax that parses
+#           2013/08/05: Create a function that copies Python variables into R. Use the BEGIN PROGRAM R inside the PYTHON program to do it and create a syntax that parses
 #             the variables to Python variables to copy.
 # 2014/07/28: Crate a function that copies R variables to Python or to SPSS. Use the BEGIN PROGRAM R inside a PYTHON program that generates a temporary SPSS
 #             from which Python can read the value using a dataStep(). However I am thinking whether some XML functionality would also do the trick...
+#             See the answer from Jon Peck in ~ Jun-2014 at the IBM Developerworks forum.
+# 2015/01/16: Create a function that copies an R data frame to SPSS.
+#             Code taken from M2014-v2SBR-02ProcesoModelizacion_WOE.sps in the NBC 2014 project:
+#               BEGIN PROGRAM R.
+#                   # Dictionary de las nuevas variables a crear en el dataset
+#                   # Nota: cada nueva variable es una nueva COLUMNA en el dictionary dict; la funcion replicate() pone cada vector indicado en c() en columnas distintas
+#                   dict.newvars = replicate( length(newvarclass), c("", "", 8, "A8", "nominal") )          # Note: the colum names of the data frame containing the dictionary are not important
+#                   # Asigno el nombre de la variable a cada columna del dictionary
+#                   j = 0
+#                   for (v in newvarclass) {
+#                       j = j + 1
+#                       dict.newvars[1, j] = v
+#                   }
+#                   dict = data.frame(dict,  dict.newvars)
+#                   # Set the dictionary
+#                   spssdictionary.SetDictionaryToSPSS("tofit.new", dict)
+#                   # Set the data
+#                   spssdata.SetDataToSPSS("tofit.new", tofit.new)
+#                   # Close the dataset
+#                   spssdictionary.EndDataStep()
+#               END PROGRAM.
 #
 
 # Some writing standards:

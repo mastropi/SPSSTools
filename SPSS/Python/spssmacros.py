@@ -103,7 +103,8 @@ IMPORTANT: It is assumed that the output language and the user interface languag
 #
 
 # TODO:
-# [DONE-2013/12/20: new function CheckVariables()] 2013/08/01: Check variable existence (Ref: DM)
+# [DONE-2013/12/20: new function CheckVariables()]
+#           2013/08/01: Check variable existence (Ref: DM)
 #             Use the spss.Dataset class and the spss.VarList class to check whether the variables passed by the user to any function exist in the dataset.
 #             Ex: (from PDF documentation on Python programmability, VarList class section, page 76)
 #               datasetObj = spss.Dataset('data1')
@@ -114,9 +115,11 @@ IMPORTANT: It is assumed that the output language and the user interface languag
 #             For example, the MissingValues() function below uses a cursor but the Summary() does not, so the Summary() function
 #             may work and the MissingValues() will NOT work if the variable names are specified with the wrong case!!!!
 # [DONE-2013/12/19: I simply added the set() function in the BuildVarListAndString() function,
-#       although more elaborate process needs to be used in order to keep the original order of the variable] 2013/12/08: Dedup variable lists when passed to e.g. MissingValues(), Summary(), otherwise if there are repeated variable names,
+#       although more elaborate process needs to be used in order to keep the original order of the variable]
+#           2013/12/08: Dedup variable lists when passed to e.g. MissingValues(), Summary(), otherwise if there are repeated variable names,
 #             the following error is shown during execution: "TypeError: duplicate attribute name".
-# [DONE-2013/08/14: I created the function BuildVarListAndString that solves the problem which is based on the use of the strip() method for strings] 2013/08/01: Correctly parse list of variables with empty lines (Ref: DM)
+# [DONE-2013/08/14: I created the function BuildVarListAndString that solves the problem which is based on the use of the strip() method for strings]
+#           2013/08/01: Correctly parse list of variables with empty lines (Ref: DM)
 #             Use the RemoveNamesFromList() function to remove any empty lines passed at first value or last value of a list of variables to analyze
 #             (e.g. when using the r""" way of listing variables and leaving the first line empty and the last line empty)
 #             Use the following command after the call to vars = spssaux._buildvarlist(vars)
@@ -124,7 +127,7 @@ IMPORTANT: It is assumed that the output language and the user interface languag
 #             Note that this is already done in PartialPlots().
 # 2013/08/02: Output to the viewer (Ref: Paula Busto (NAT))
 #             Show the content of output datasets in the Viewer (e.g. output of MissingValues and Summary)
-# 2013/08/08: Iterative Regression with detection of high collinear variables and influential observations (Ref: DM)
+# 2013/08/08: Iterative Regression with detection of high collinear variables and influential observations at each step (Ref: DM)
 #             For collinearity detection procede as follows:
 #             (1) Do it on numeric variables (and perhaps include categorical ordinal variables by converting their values to integers...) using the REGRESSION command.
 #             (2) Start iterative procedure that:
@@ -145,8 +148,11 @@ IMPORTANT: It is assumed that the output language and the user interface languag
 #             (3) Remove ALL influential observations having DFBETA > 2 for the Beta having the largest p-value (which would be eliminated next) --> goal: make sure the estimate of the beta to be eliminated is NOT biased.
 #             (4) Remove THE SINGLE variable with p-value > 0.2 (or another threshold)
 #             (5) Go to (2) until all variables in the model are significant (p-value < 0.05 or another threshold)
-# [DONE-2013/09/05: new Python function Score()] 2013/08/14: Python function to score new data, based on a regression model and needed transformation of variables (e.g. piecewise variables). (Ref: Paula Busto)
-# [NOTURGENT-2013/12/19: SPSSINC CREATE DUMMY VARIABLES can be used for this, although the macro variable names giving the list of created dummy variables is not so convenient] 2013/08/29: Python function to create dummy variables from categorical variables so that they can be used in a REGRESSION command. Use the VECTOR command to map an array to the dummy variables.
+# [DONE-2013/09/05: new Python function Score()]
+#           2013/08/14: Python function to score new data, based on a regression model and needed transformation of variables (e.g. piecewise variables). (Ref: Paula Busto)
+# [NOTURGENT-2013/12/19: SPSSINC CREATE DUMMY VARIABLES can be used for this, although the macro variable names giving the list of created dummy variables is not so convenient]
+#           2013/08/29: Python function to create dummy variables from categorical variables so that they can be used in a REGRESSION command.
+#             Use the VECTOR command to map an array to the dummy variables.
 #             See example of creating dummy variables in SPSS Help.txt. (Ref: Daniel Mastropietro)
 # 2013/12/19: Try to implement a forward or backward regression model where we force the inclusion of x and I<n>_x where I<n>_x are
 #             indicator functions that x takes the value <n> or missing. Perhaps this must be done in R..., using the add1() and drop1()
@@ -155,9 +161,16 @@ IMPORTANT: It is assumed that the output language and the user interface languag
 # 2013/12/20: Put the input parameters parsing into one single function or as subfunctions of a single function called ParseInputParameters.
 #             The subfunctions would depend on the parameter being parsed which would be passed as parameter to the function (e.g. DATA, VARS, etc.)
 #             This will help homogenize the parsing process and avoid having to repeat the same piece of code in every function!
+# 2015/01/16: In PlotTargetVSCat:
+#             - Implement the vars= parameter so that MANY VARIABLES can be passed by the user for processing (not just one as it is know)
+#             - Fix the error that happens when the length of a string variable in the dataset generated by the function is shorter than i
+#             the original dataset, making the MATCH FILES command fail because of incompatible types (For an example or reference, see
+#             03-Prepare.sps in Nextel project 02-Otorgamiento)
+#             This happens apparently because the length of the original variable is longer than necessary and when an intermediate dataset
+#             is created in the process, the length is shrinked to the actual (shorter) length of the values taken by the variable.
 #
 
-# Some writing standards:
+# Selected writing standards:
 # 1.- Name all temporary datasets with prefix @ (e.g. @data for the temporary dataset containing the input data).
 # 2.- Parse input parameters and, if there is an error, stop execution using 'if error: return'
 # 

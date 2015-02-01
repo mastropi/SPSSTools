@@ -38,6 +38,22 @@
 #									The function was originally copied from Antoine Thibaud's roc.1(), to which I added some additional functionality.
 #
 
+# TODO:
+# - 2015/01/16: GroupCategories() and AssignCategories():
+#								- Make them work on a data frame and a set of analysis variables passed as strings.
+#								- Remove trailing blanks from variable values when performing the analysis. I have seen variables having trailing blanks
+#								when running these functions from R in SPSS (Ref: 03-Prepare.sps in Nextel project, folder 02-Otorgamiento)
+#								- Add the option in GroupCategories() of generating an SPSS syntax for the RECODE so that when GroupCategories()
+#								is run form R in SPSS, the user just needs to copy the syntax to run the grouping process, and optionally change the
+#								assigned categories if they wish.
+#
+# - 2015/01/29: ModelFit():
+#								- Re-write the signature so that it takes a MODEL as argument. That is, from the model information, the function should infer
+#								the target variable, the input variables, which ones are continuous variables (i.e. the non-factor ones so that a model fit
+#								plot makes sense) --although 0/1 binary variables might still be considered as continuous in case they were not specified
+#								as factor variables by the user!
+#
+
 
 ######################################## GroupCategories ######################################
 # 2014/03/26
@@ -87,7 +103,9 @@ GroupCategories = function(
 # Description:	Automatically group contiguous categories of a categorical variable based on the value of a target variable
 #								and a chi-square statistic.
 # Parameters:		(See above)
-# Output:				A list containing the original barplot of y vs. x in 'bar' and the new barplot of y vs. grouped x in 'outbars'.
+# Output:				A list with the following 2 elements:
+#								- $bars: the data of the original barplot of y vs. x
+#								- $outbars: the data of the new barplot of y vs. (x after grouping by the algorithm).
 # Examples:			GroupCategories(x, y, pthr=0.5, exclusions=c("ZZ-OTHER", "ZZZ-UNKNOWN"))
 {
 	#--------------------------------- Auxiliary functions --------------------------------------
@@ -619,11 +637,13 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 #								- groupedCat: List containing the output from a call to the GroupCategories() function.
 #									Each element of the list is the result of applying the GroupCategories() function to each variable in vars.
 # Output:				The dataset 'dat' is returned containing the newly created variables specified in 'newvars'.
-# Examples:			vars.gc[[1]] = GroupCategories(x, y)
-#								vars.gc[[2]] = GroupCategories(z, y)
-#								newvalues[[1]] = c(10, 20, 999)																			# Categories of the new categorized variable x_cat
-#								newvalues[[2]] = c("1-GRP3", "2-GRP5", "ZZ-OTHER", "ZZZ-UNKNOWN")		# Categories of the new categorized variable z_cat
-#								AssignCategories(tofit, "x z", "x_cat z_cat", newvalues, vars.gc)
+# Examples:			Example 1:
+#									vars.gc = list()
+#									vars.gc[[1]] = GroupCategories(tofit$x, tofit$y)										# Categorize variable x in terms of target y
+#									vars.gc[[2]] = GroupCategories(tofit$z, tofit$y)										# Categorize varibale z in terms of target y
+#									newvalues[[1]] = c(10, 20, 999)																			# Categories of the new categorized variable x_cat
+#									newvalues[[2]] = c("1-GRP3", "2-GRP5", "ZZ-OTHER", "ZZZ-UNKNOWN")		# Categories of the new categorized variable z_cat
+#									AssignCategories(tofit, "x z", "x_cat z_cat", newvalues, vars.gc)
 {
 	# Check if the variables passed were passed as arrays (length>1) or strings (length=1)
 	if (length(vars) == 1) { vars = unlist(strsplit(vars,"[ \n]")) }

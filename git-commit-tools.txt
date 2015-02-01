@@ -182,8 +182,19 @@ startup-functions.r:
 - Updated functions:
 	- extract(): (the old midpoints() function)
 		- Extended this function to return the midpoint, lower value or upper value of intervals like those returned by the cut() function. Until now, the function returned only the midpoints.
-
+	
 dmspssaux.py:
 - Updated functions:
 	- Save():
 		- Extended the functionality so that "any" format other than "SAV" is saved using SAVE TRANSLATE. I enclose "any" in quotes because this was only tested with format="XLS" and format="CSV". Note that before I was only able to save in format="XLS", so the CSV format was now added.
+
+commit of Tools: 2014/12/16 - 2014/01/31 [COMMITTED]
+----------------------------------------
+plot.cdf(): 'reverse' parameter for "decreasing x" CDF
+
+general: revised and improved TODOs and DONEs in spssmacros.py, spssmacrosR.py, startup-functions.r, datamining-functions.r. 
+
+startup-functions.r:
+- Updated functions:
+	- plot.cdf(): added the possibility of computing the CDF of x in decreasing order. This is intended to compute the CDF in a manner like the Gains Chart in scoring models, where the top cases are those with higher probabilities.
+	This was done with new boolean parameter 'reverse'.
