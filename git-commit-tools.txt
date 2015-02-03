@@ -198,3 +198,12 @@ startup-functions.r:
 - Updated functions:
 	- plot.cdf(): added the possibility of computing the CDF of x in decreasing order. This is intended to compute the CDF in a manner like the Gains Chart in scoring models, where the top cases are those with higher probabilities.
 	This was done with new boolean parameter 'reverse'.
+
+commit of Tools: 2014/02/01 - 2015/02/03 [COMMITTED]
+----------------------------------------
+plot.binned(): new parameter 'size' for grouped data
+
+startup-functions.r:
+- Updated functions:
+	- plot.binned(): added parameter 'size' to specify the variable that should be used as size for the symbols() plot when grouped=TRUE.
+	Although the circles= and thermometers= options already existed for this purpose (by way of expressions) its functionality doesn't seem to be working properly (since the bubbles are not plotted proportinal to the variable specified in circles=, e.g. circles=expression(x_n), and in addition the size information specified in circles= is NOT used when computing the lm() and loess() fits!)

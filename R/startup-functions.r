@@ -798,7 +798,7 @@ panel.image = function(x, y, col="red", nlevels=12, xaxt="s", yaxt="s", addXAxis
 # on the target and in that case display it as the title of the plot and also show a table of the WOE by bin on the right-hand side
 # of the plot (but only when add=FALSE, which is the case for instance when the plot is NOT part of a pairs plot)
 plot.binned = function(
-	x, y, pred=NULL, target=NULL, grouped=FALSE,
+	x, y, pred=NULL, target=NULL, grouped=FALSE, size=NULL,	# 'grouped' whether the data is already grouped; 'size' variable to use as symbol size in the plot (e.g. x_n)
 	center=mean, scale=sd, groups=20, breaks=NULL, rank=TRUE,
   lm=TRUE, loess=TRUE,
   circles=NULL, thermometers=NULL,  # 'circles' and 'thermometers' must be EXPRESSIONS that parameterize the corresponding symbol based on the computed grouped values (e.g. circles=expression(x_n) or thermometers=expression(cbind(x_n,y_n,target_center)), since these values would not exist during the function call)
@@ -870,6 +870,11 @@ plot.binned = function(
 #												 Updated ylim range when pred variable is passed and ylim="new".
 #						(2014/05/11) Added logical parameter 'limits' which indicates whether to show the x limits of each bin as vertical gray lines.
 #												 Changed the default value of 'clip' from "figure" to "region" and at the same time forced the use of par(xpd=TRUE) before showing the point labels.
+#						(2015/02/03) Added parameter 'size' to specify the variable that should be used as size for the symbols() plot when grouped=TRUE.
+#												 Although the circles= and thermometers= options already existed for this purpose (by way of expressions) its functionality
+#												 doesn't seem to be working properly (since the bubbles are not plotted proportinal to the variable specified in circles=,
+#												 e.g. circles=expression(x_n), and in addition the size information specified in circles= is NOT used when computing the
+#												 lm() and loess() fits!)
 {
   #----------------------------------- Parse input parameters ---------------------------------#
   ### Check whether this function is called by pairs, in order to set parameter add=TRUE, so a new plot is NOT created (which gives an error in pairs())
@@ -965,9 +970,11 @@ plot.binned = function(
 		  # Group the values of x in equally size distances (but not in equal size groups!)
 		  x_cat = as.numeric(cut(x, breaks=breaks, right=FALSE))
 		}
+	} else {
+		x_cat = x
+	  # Define the value of x_n to be used in the plots and lm() and loess() fits below
+	  if (!is.null(size)) x_n = size
 	}
-	else
-	{	x_cat = x	}
 	
   dat = data.frame(x=x, y=y)
 	if (!is.null(pred))   { dat$pred = pred }
