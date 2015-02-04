@@ -207,3 +207,13 @@ startup-functions.r:
 - Updated functions:
 	- plot.binned(): added parameter 'size' to specify the variable that should be used as size for the symbols() plot when grouped=TRUE.
 	Although the circles= and thermometers= options already existed for this purpose (by way of expressions) its functionality doesn't seem to be working properly (since the bubbles are not plotted proportinal to the variable specified in circles=, e.g. circles=expression(x_n), and in addition the size information specified in circles= is NOT used when computing the lm() and loess() fits!)
+
+commit of Tools: 2014/02/04 - 2015/02/04 [COMMITTED]
+----------------------------------------
+New cdf() function and updated plot.cdf()
+
+startup-functions.r:
+- New functions:
+	- cdf(): computes the empirical CDF.
+- Updated functions:
+	- plot.cdf(): added parameter empirical=TRUE so that it computes the empirical CDF instead of the "quantile" CDF. When empirical=TRUE, this function calls the new cdf() function for the computation of the empirical CDF.
