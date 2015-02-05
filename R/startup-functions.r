@@ -1899,7 +1899,7 @@ biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersF
 }
 
 # plot.cdf: Plot CDF of a numeric variable
-plot.cdf = function(x, empirical=TRUE, probs=seq(0,1,0.01), add=FALSE, reverse=FALSE, ...)
+plot.cdf = function(x, empirical=TRUE, probs=seq(0,1,0.01), add=FALSE, freq=FALSE, reverse=FALSE, ...)
 # Created:      12-Mar-2014
 # Modified:     04-Feb-2015
 # Description:  Plot CDF of a numeric variable in the quantiles specified in parameter 'probs'
@@ -1908,7 +1908,9 @@ plot.cdf = function(x, empirical=TRUE, probs=seq(0,1,0.01), add=FALSE, reverse=F
 #								empirical:	Whether to compute the empirical CDF (as opposed to a fixed-quantile based CDF (where the quantiles are specified in 'probs'.
 #								probs: 			Array of values between 0 and 1 defining the quantiles of x to compute.
 #								add: 				Flag indicating whether to add the plot to an existing plot.
-#								reverse:		Whether to compute the CDF on the reversed value of x (i.e. larger values of x correspond to smaller quantiles)
+#								freq:				Flag indicating whether to show the cumulative number of cases on the vertical axis (instead of the cumulative percent).
+#								reverse:		Flag indicating whether to compute the CDF on the reversed values of x.
+#														(i.e. larger values of x correspond to smaller quantiles)
 #								...:				Additional parameters passed to the plot() function.
 # Output:       A matrix containing the CDF of x where the row names are the quantile values defined in 'probs'.
 # Assumptions:  None
@@ -1966,6 +1968,10 @@ plot.cdf = function(x, empirical=TRUE, probs=seq(0,1,0.01), add=FALSE, reverse=F
 			paramsList$xlim = rev(optionsList$xlim)	# NOTE that here we need to use optionsList$xlim and NOT paramsList$xlim because the latter has TEXT value (e.g. "c(0,1)")!!
 		}
 	}
+	# Check parameter FREQ
+	if (freq)
+		# Plot the cumulative number of cases, instead of the cumulative % cases for each value x
+		cdf.values = cdf.values/100 * sum(!is.na(x))
 
 	# Plot
 	# Define default values for graphical parameters (by checking whether the user passed any of those defined)
@@ -1998,6 +2004,7 @@ plot.cdf = function(x, empirical=TRUE, probs=seq(0,1,0.01), add=FALSE, reverse=F
 	paramsList$probs = NULL
 	paramsList$add = NULL
 	paramsList$empirical = NULL
+	paramsList$freq = NULL
 	paramsList$reverse = NULL
 	
 	par(new=add)

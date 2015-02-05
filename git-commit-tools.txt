@@ -217,3 +217,11 @@ startup-functions.r:
 	- cdf(): computes the empirical CDF.
 - Updated functions:
 	- plot.cdf(): added parameter empirical=TRUE so that it computes the empirical CDF instead of the "quantile" CDF. When empirical=TRUE, this function calls the new cdf() function for the computation of the empirical CDF.
+
+commit of Tools: 2014/02/05 - 2015/02/05 [COMMITTED]
+----------------------------------------
+plot.cdf(): new parameter 'freq'
+
+startup-functions.r:
+- Updated functions:
+	- plot.cdf(): added parameter freq=FALSE so that the user can request plotting the number of cases in the vertical axis, instead of the cumulative percent of cases.
