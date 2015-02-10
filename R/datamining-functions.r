@@ -99,6 +99,7 @@ GroupCategories = function(
 		cex.names=0.6				# Character expansion factor for the names (values of categorical variable) of the barplot
 )
 # Created:			27-Mar-2014
+# Modified:			09-Feb-2015
 # Author:				Daniel Mastropietro
 # Description:	Automatically group contiguous categories of a categorical variable based on the value of a target variable
 #								and a chi-square statistic.
@@ -211,7 +212,7 @@ GroupCategories = function(
 		FUN = stat
 		if (missing(pthr)) pthr = 0.10
 	}
-	bars = plot.bar(x, y,
+	bars = plot.bar(as.vector(x), as.vector(y),
 									event=event, na.rm=na.rm, FUN=FUN, las=3,
 									decreasing=decreasing,
 									main=paste("Initial categories of variable", ifelse(!is.null(varname), varname, deparse(substitute(x)))),
@@ -634,8 +635,8 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 #														 - the vector in each list element has the following properties:
 #																- its length is equal to the number of new categories to create in the corresponding variable listed in 'newvars'
 #																- it contains the values to use to represent the new categories to be stored in the corresponding variable listed in 'newvars'.
-#								- groupedCat: List containing the output from a call to the GroupCategories() function.
-#									Each element of the list is the result of applying the GroupCategories() function to each variable in vars.
+#								- groupedCat: List (that MUST be indexed by integer numbers 1, 2, ...) each element of which contains the result of
+#									applying the GroupCategories() function to each variable in vars.
 # Output:				The dataset 'dat' is returned containing the newly created variables specified in 'newvars'.
 # Examples:			Example 1:
 #									vars.gc = list()
@@ -643,7 +644,7 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 #									vars.gc[[2]] = GroupCategories(tofit$z, tofit$y)										# Categorize varibale z in terms of target y
 #									newvalues[[1]] = c(10, 20, 999)																			# Categories of the new categorized variable x_cat
 #									newvalues[[2]] = c("1-GRP3", "2-GRP5", "ZZ-OTHER", "ZZZ-UNKNOWN")		# Categories of the new categorized variable z_cat
-#									AssignCategories(tofit, "x z", "x_cat z_cat", newvalues, vars.gc)
+#									tofit = AssignCategories(tofit, "x z", "x_cat z_cat", newvalues, vars.gc)
 {
 	# Check if the variables passed were passed as arrays (length>1) or strings (length=1)
 	if (length(vars) == 1) { vars = unlist(strsplit(vars,"[ \n]")) }
