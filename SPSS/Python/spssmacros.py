@@ -382,6 +382,7 @@ def RemoveNamesFromList(list=(), names=(), casesensitive=True, outcase=None, out
 #           - Added the usual check of parameter types.
 def MissingValues(
     data=None,
+    where=None,
     vars=(),
     value=0,
     out=None,
@@ -393,6 +394,8 @@ def MissingValues(
     """Computes number and percentage of missing values and of another selected value (default 0)
 
     data:               Name of the analysis dataset. If empty the active dataset is used.
+                        Default: None
+    where:              SPSS condition to apply on the analysis dataset.
                         Default: None
     vars:               String, list or tuple containing the variable names to analyze.
                         Default: ()
@@ -446,6 +449,9 @@ def MissingValues(
     if data and not isinstance(data,str):
         errmsg = errmsg + "\nMISSINGVALUES: ERROR - Parameter DATA must be of type string (value given: " + str(data) + ")"
         error = True
+    if where and not isinstance(where,str):
+        errmsg = errmsg + "\nMISSINGVALUES: ERROR- Parameter WHERE must be of type string (value given: " + str(where) + ")"
+        error = True
     if vars and not isinstance(vars,(str,list,tuple)):
         errmsg = errmsg + "\nMISSINGVALUES: ERROR - Parameter VARS must be of type string, list or tuple (value given: " + str(vars) + ")"
         error = True
@@ -485,6 +491,18 @@ def MissingValues(
         if data is None:            # This value is returned by getActiveDatasetName() when the active dataset does not have a name
             data = "None"
 
+    #-- WHERE
+    if where:
+        # Look for keyword $CASENUM, in which case the variable CASE is created in order to avoid the problems of for example
+        # selecting records that satisfy $CASENUM > 100 (which will select 0 records, because of the logic behind SPSS,
+        # which defines the value of $CASENUM as the case number in the OUTPUT dataset!!!)
+        try:
+            casenum = True
+            where.lower().index("$casenum")
+            where.lower().replace("$casenum", "case")
+        except:
+            casenum = False
+
     #-- VARS
     if vars:
         varlist, vars = BuildVarListAndString(vars)
@@ -520,6 +538,7 @@ def MissingValues(
         print "\nFunction call resolves to:"
         print "MissingValues("
         print "\tdata =        ", data
+        print "\twhere =       ", where
         print "\tvars =        ", "\n\t\t\t".join(varlist)
         print "\tvalue =       ", value
         print "\tout =         ", outdata
@@ -540,6 +559,24 @@ def MissingValues(
         print errmsg
         return
     #-------------------------------- Parse input parameters ----------------------------------
+
+
+    # Apply where condition by creating a temporary dataset @data
+    if where:
+        spss.Submit(r"""
+dataset copy @data.
+dataset activate @data.
+""")
+        ## NOTE that I don't update the value of Python variable DATA, because this is not used anymore to define the
+        ## active dataset.
+
+        if casenum:
+            spss.Submit("compute case = $CASENUM")
+        print "Selecting cases based on the WHERE= parameter..."
+        print("select if (" + where + ")")
+        spss.Submit(["select if (" + where + ").", "execute"])  # Here the EXECUTE is important, otherwise the subsequent analysis is done on the original number of cases!!
+        print "Number of cases used for analysis:"
+        spss.Submit("show N")
 
     # Temporary CSV file where the results of the missing value analysis are stored and then read into the output dataset
     tempfile = "/".join([tempdir, "_missing.csv"])
@@ -630,6 +667,8 @@ dataset name %(outdata)s.
 #       spss.Submit("save outfile = '" + savedir + outdata + ".sav'")
 
     # Close temporary datasets and delete temporary files
+    if where:
+        spss.Submit("dataset close @data")
     spss.Submit("host command = 'del \"" + tempfile.replace("/","\\") + "\"'")
 
     # Activate the input dataset so that the user can continue doing processes on it without having to activate it again

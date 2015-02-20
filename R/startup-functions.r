@@ -2083,10 +2083,10 @@ plot.cdf = function(x, weight=NULL, probs=seq(0,1,0.01), empirical=TRUE, include
 
 	if (!is.null(weight)) {
 		output = xw.cdf
-		colnames(output) = c("q", deparse(substitute(x)), deparse(substitute(weight)))
+		colnames(output) = c("q", deparse(substitute(x))[1], deparse(substitute(weight))[1])	# I use [1] after deparse(substitute()) because I got once an error where x was given as a long condition on a data frame and the result of deparse(substitute()) had length 2!!
 	} else {
 		output = as.data.frame(x.cdf)
-		colnames(output) = deparse(substitute(x))
+		colnames(output) = deparse(substitute(x))[1]
 	}
 
 	return(invisible(output))
