@@ -245,3 +245,12 @@ New parameter where= in MissingValues()
 spssmacros.py:
 - Updated functions:
 	- MissingValues(): added new parameter where= in order to be able to do the analysis on a subset of the data.
+
+
+commit of Tools: 2014/02/20 - 2015/03/02 [COMMITTED AND DEPLOYED]
+----------------------------------------
+New function GetVariableInfo() in dmspssaux
+
+dmspssaux.py:
+- New functions:
+	- GetVariableInfo(): function that retrieves a specified set of information about an SPSS dataset, such as variable names, variable labels, etc.

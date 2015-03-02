@@ -33,6 +33,20 @@ Author: Daniel Mastropietro"""
 #             from which Python can read the value using a dataStep(). However I am thinking whether some XML functionality would also do the trick...
 #             See the answer from Jon Peck in ~ Jun-2014 at the IBM Developerworks forum.
 # 2015/01/16: Create a function that copies an R data frame to SPSS.
+#             EXAMPLE 1: WHEN WE NEED TO CREATE THE DICTIONARY FROM SCRATCH
+#             Ref: http://www-01.ibm.com/support/knowledgecenter/SSLVMB_21.0.0/com.ibm.spss.statistics.r.help/r_package_spssdictionary_createspssdictionary.htm
+#               BEGIN PROGRAM R.
+#                   cutoffs = rbind(c(6,0.253), c(5,0.007))
+#                   dict.nivel = c("nivel", "", 0, "F1.0", "ordinal")
+#                   dict.cutoff = c("cutoff", "", 0, "F8.5", "scale")
+#                   dict = spssdictionary.CreateSPSSDictionary(dict.nivel, dict.cutoff)
+#                   print(dict)
+#                   spssdictionary.SetDictionaryToSPSS("cutoffs", dict)
+#                   spssdata.SetDataToSPSS("cutoffs", as.data.frame(cutoffs))
+#                   spssdictionary.EndDataStep()
+#               END PROGRAM.
+#
+#             EXAMPLE 2: WHEN A DICTIONARY ALREADY EXISTS AND WE NEED TO ADD NEW VARIABLES
 #             Code taken from M2014-v2SBR-02ProcesoModelizacion_WOE.sps in the NBC 2014 project:
 #               BEGIN PROGRAM R.
 #                   # Dictionary de las nuevas variables a crear en el dataset

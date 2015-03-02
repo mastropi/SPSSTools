@@ -12,7 +12,9 @@ Author: Daniel Mastropietro"""
 #             for different variables!)
 # 2014/12/12: Extended Save() to save translate to "any" type of format.
 #             I didn't do much, I just changed the condition "format.lower() == 'xls'" with "format.lower() <> 'sav'".
-#
+# 2015/02/26: New GetVariableInfo() function,
+#             it returns selected attributes of an SPSS dataset (such as variable names, variable labels, etc.)
+#             
 
 import spss
 import spssaux
@@ -21,8 +23,9 @@ import spssaux
 # Global variables used at NAT
 from natglobals import tempdir_
 
-__all__ = [ "CheckVariables",
-            "BuildVarListAndString",
+__all__ = [ "BuildVarListAndString",
+            "CheckVariables",
+            "GetVariableInfo",
             "Save"]
 
 ################################### BuildVarListAndString #####################################
@@ -92,6 +95,87 @@ def BuildVarListAndString(vars, sort=False, dedup=True):
 
     return varlist, vars
 ################################### BuildVarListAndString #####################################
+
+
+
+
+##################################### GetVariableInfo #########################################
+# 2015/02/26
+def GetVariableInfo(data=None, info=["name"]):
+    """Returns information about an SPSS dataset as a list or dictionary.
+    The information that can be retrieved is the information that is available in an spss.Dataset() object,
+    such as variable names, labels, etc.
+    
+    The function returns either a list or a dictionary:
+    - it returns a list when the requested pieces of information are just one (e.g. ["names"])
+    - it returns a dictionary when the requested pieces of informatin are more than one (e.g. ["names", "labels"])
+
+    data:               Name of the dataset from which the information is desired. If empty the active dataset is used.
+                        Default: None
+    info:               String, list or tuple containing the information to retrieve.
+                        Valid values are the attributes of an spss.Dataset() object.
+                        Default: ["name"]
+    """
+    #----------------------------------- Parse input parameters -------------------------------
+    #-- Check type of input parameters
+    error = False
+    errmsg = ""     # This variable collects all the generated error messages to be shown before exiting (return)
+
+    if data and not isinstance(data,str):
+        errmsg = errmsg + "\GETVARNAMES: ERROR - Parameter DATA must be of type string (value given: " + str(data) + ")"
+        error = True
+    if data and not isinstance(info,str) and not isinstance(info,list) and not isinstance(info,tuple):
+        errmsg = errmsg + "\GETVARNAMES: ERROR - Parameter INFO must be of type string, list or tuple (value given: " + str(info) + ")"
+        error = True
+
+    # Stop execution when there is an error in the input parameters.
+    if error:
+        print "\nStopping execution because of the following errors:"
+        print errmsg
+        return
+        
+    #-- INFO
+    # Force info to be a list
+    info = spssaux._buildvarlist(info)
+    #----------------------------------- Parse input parameters -------------------------------
+
+    # Close any open data cursor in case it exists (because of an error in a previous execution)
+    # Note that this does NOT give any error if there is no open data cursor!
+    spss.EndDataStep()
+    
+    # Open the data cursor
+    spss.StartDataStep()
+    if data:
+        dataObj = spss.Dataset(name=data)
+    else:
+        # Read the variables from the active dataset
+        dataObj = spss.Dataset()
+        
+    # Variable list object
+    varlistObj = dataObj.varlist
+    
+    # Extract the specified attributes from the variable list object
+    if len(info) == 1:
+        # The output is a single list
+        varlist = []
+        for v in varlistObj:
+            varlist.append(getattr(v, info[0]))
+    else:
+        # The output is a dictionary of lists
+        outdict = {}
+        # Initialize each entry of the dictionary
+        for i in info:
+            outdict[i] = []
+        for v in varlistObj:
+            for i in info:
+                outdict[i].append(getattr(v, i))
+    spss.EndDataStep()
+ 
+    if len(info) == 1:
+        return varlist
+    else:
+        return outdict
+##################################### GetVariableInfo #########################################
 
 
 
