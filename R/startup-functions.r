@@ -843,7 +843,9 @@ panel.image = function(x, y, col="red", nlevels=12, xaxt="s", yaxt="s", addXAxis
 # plot.binned: Binned plot
 # TODO:
 # - 2008/09/09: Add a parameter that allows to show the labels of the original scale when the plotted variable
-# is log-transformed.
+# is log-transformed. OR BETTER (2015/04/03): add a parameter that requests using the log of the variable to compute the bin centers
+# (in order to avoid a too stretched x scale to the rigth when the original variable has too large values), then use log(x) for the plot
+# but use the original x values for the x labels.
 # - 2013/09/17: Add parameter 'lmbands' which can take values NULL, "confidence", "prediction" which are the possible
 # values of parameter 'interval' of the predict.lm() function in order to add the confidence or prediction bands to the lm fit.
 # The code to compute those bands would be the following:
@@ -858,6 +860,10 @@ panel.image = function(x, y, col="red", nlevels=12, xaxt="s", yaxt="s", addXAxis
 # - 2013/11/14: If requested, have the function call InformationValue() to compute the information value of the analyzed variable
 # on the target and in that case display it as the title of the plot and also show a table of the WOE by bin on the right-hand side
 # of the plot (but only when add=FALSE, which is the case for instance when the plot is NOT part of a pairs plot)
+# - 2015/04/03: Add the possibility of NOT using CIRCLES to plot each point (i.e. points that are proportional to the bin size) but to
+# show just the point labels indicating the bin size. This is to mimic what the PartialPlot() function does in SPSS/Python where we can
+# easily appreciate the size of the point because we can see the pointlabel indicating the bin size. However, SPSS has a smart way of
+# placing the labels when there is overlap... and R does not!
 plot.binned = function(
 	x, y, pred=NULL, target=NULL, grouped=FALSE, size=NULL,	# 'grouped' whether the data is already grouped; 'size' variable to use as symbol size in the plot (e.g. x_n)
 	center=mean, scale=sd, groups=20, breaks=NULL, rank=TRUE,
@@ -872,7 +878,7 @@ plot.binned = function(
 		# xlim, ylim, ylim2 can be either a regular c(minvalue, maxvalue) or a character value: "new" or "orig"
 		# in order to specify whether the new scale coordinates (after binning) or the ORIGINAL values should be used as axis limits
 		# within a pairs() call the same axis scales are expected to be shown for ALL panels, unless missing values vary across variables.
-  type2="b", pch2=21,	  # type and pch par() options defining the form and symbol of the target variable
+  type2="o", pch2=21,	  # type and pch par() options defining the form and symbol of the target variable
   xaxt="s", yaxt="s",
 	addXAxis=FALSE, addYAxis=(ylim=="new" || ylimProperty=="new"), addY2Axis=(ylim2=="new" || ylim2Property=="new"),
 		# addXAxis, addYAxis, addY2Axis: Whether to force showing the x/y/y2-axis tick marks next to EACH axis in a pairs plot.

@@ -254,3 +254,12 @@ New function GetVariableInfo() in dmspssaux
 dmspssaux.py:
 - New functions:
 	- GetVariableInfo(): function that retrieves a specified set of information about an SPSS dataset, such as variable names, variable labels, etc.
+
+
+commit of Tools: 2015/03/03 - 2015/04/03 [COMMITTED]
+----------------------------------------
+By default use continuous line (type="o") in plot.binned()
+
+startup-functions.r:
+- Updated functions:
+	- plot.binned(): replaced default value of 'type2' parameter from "b" to "o" so that the lines for the target variable are shown fully joined.
