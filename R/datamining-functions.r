@@ -1,6 +1,6 @@
 # datamining-functions.r
 # Created: 		  03-Jul-2013
-# Modified: 	  31-Jul-2014
+# Modified: 	  16-Apr-2015
 # Author: 		  Daniel Mastropietro
 # Description: 	Set of Data Mining functions
 # Dependencies: startup-functions.r, from which the following functions are used:
@@ -934,9 +934,7 @@ if (!is.null(valueLabels)) {
 }
 # STATS
 nstats = 0
-if (!is.null(stats)) {
-  # Set the default value when an empty string is passed (instead of NULL)
-  if (stats == "") { stats = c("q5 median q95") }
+if (!is.null(stats) && stats != "") {
   stats = unlist(strsplit(stats, "[ \n]"))
   nstats = length(stats)
   statFuns = stats

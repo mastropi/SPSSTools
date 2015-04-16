@@ -29,7 +29,7 @@ Author: Daniel Mastropietro"""
 # [DONE-2013/12/11: RCopyVariables() function]
 #           2013/08/05: Create a function that copies Python variables into R. Use the BEGIN PROGRAM R inside the PYTHON program to do it and create a syntax that parses
 #             the variables to Python variables to copy.
-# 2014/07/28: Crate a function that copies R variables to Python or to SPSS. Use the BEGIN PROGRAM R inside a PYTHON program that generates a temporary SPSS
+# 2014/07/28: Create a function that copies R variables to Python or to SPSS. Use the BEGIN PROGRAM R inside a PYTHON program that generates a temporary SPSS
 #             from which Python can read the value using a dataStep(). However I am thinking whether some XML functionality would also do the trick...
 #             See the answer from Jon Peck in ~ Jun-2014 at the IBM Developerworks forum.
 # 2015/01/16: Create a function that copies an R data frame to SPSS.
@@ -322,7 +322,7 @@ execute.""" %locals()
 
     #-- STATS:
     if stats == None:
-        stats = "NULL"
+        stats = ""              # Do not use "NULL" because it will be passed as a string to the R function and it is not what we want.
 
     #-- SIZE:
     if size.upper() == "LARGE":

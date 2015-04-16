@@ -263,3 +263,16 @@ By default use continuous line (type="o") in plot.binned()
 startup-functions.r:
 - Updated functions:
 	- plot.binned(): replaced default value of 'type2' parameter from "b" to "o" so that the lines for the target variable are shown fully joined.
+
+
+commit of Tools: 2015/04/04 - 2015/04/16 [COMMITTED]
+----------------------------------------
+Fixed error in RDistributionsByGroup() when passing stats="" or None
+
+spssmacrosR.r:
+- Updated functions:
+	- RDistributionsByGroup(): changed the value assigned to parameter 'stats' when the user passes stats=None: before it was set to stats="NULL" and now it is set to stats=""; the reason being that "NULL" was passed to the R function DistributionsByGroup() as a string while it should be passed as the keyword NULL.
+
+datamining-functions.r:
+- Updated functions:
+	- DistributionsByGroup(): changed the behaviour of the function when stats="": before it meant use the default value of stats (="q5 median q95") and now it means do NOT show any statistics lines on the distributions plot. The change was due to intuition (i.e. intuitively a user could pass stats="" to indicate that they don't want to see any statistics lines on the distribution plot.
