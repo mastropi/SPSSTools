@@ -276,3 +276,16 @@ spssmacrosR.r:
 datamining-functions.r:
 - Updated functions:
 	- DistributionsByGroup(): changed the behaviour of the function when stats="": before it meant use the default value of stats (="q5 median q95") and now it means do NOT show any statistics lines on the distributions plot. The change was due to intuition (i.e. intuitively a user could pass stats="" to indicate that they don't want to see any statistics lines on the distribution plot.
+
+
+commit of Tools: 2015/04/17 - 2015/05/26 [COMMITTED]
+----------------------------------------
+Fixed bugs in Score() function when variables have missing values
+
+spssmacros.r:
+- Updated functions:
+	- Score():
+		- Fixed a bug when some of the input variables had missing values: the process stopped in the computation of the pred variable because it could not sum a float and a 'None' (missing) (all values of the pred variable were left to missing after such a case was encountered.)
+		- In the process that computes the pred value, added the same check I do on categorical variables inside the loop, right after the loop so that this check is performed also to the last analyzed variable (in case it is categorical). Note that the described situation of having the last analyzed variable as categorical is very rare (either all variables are categorical or when sorting alphabetically, the last variable is categorical).
+		- Created a new internal function called CheckCategoricalVariableValue() to avoid repeating the same piece of code in two different places in the function.
+		- Improved comments describing the process that computes the pred value.

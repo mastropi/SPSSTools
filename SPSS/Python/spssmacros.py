@@ -3655,6 +3655,7 @@ execute.""" %locals())
 # HISTORY:  (2013/10/11)
 #           - Added the generation of the SPSS syntax that can be used to compute the score in the future (without re-calling this function!).
 #           - Added parameter 'test' to choose between computing the score or just generating the SPSS syntax in the output.
+#
 #           (2014/01/07)
 #           - Fixed three errors:
 #             - The incorrect generation of the COMPUTE command to compute the score when a variable that comes before "constant"
@@ -3668,6 +3669,18 @@ execute.""" %locals())
 #             since in that case the variable name in the 'codings' dataset is followed by the variable label!! (after a blank space)
 #           - Added parameters 'debug' and 'debugmaxcases' (following a suggestion by Antoine) in order to help the user find
 #           an error in the predicted value when values are not as expected.
+#
+#           (2015/06/25)
+#           - Fixed a bug when some of the input variables had missing values: the process stopped in the computation of the pred
+#           variable because it could not sum a float and a 'None' (missing) (all values of the pred variable were left to missing
+#           after such a case was encountered.)
+#           - In the process that computes the pred value, added the same check I do on categorical variables inside the loop, right
+#           after the loop so that this check is performed also to the last analyzed variable (in case it is categorical). Note that
+#           the described situation of having the last analyzed variable as categorical is very rare (either all variables are categorical
+#           or when sorting alphabetically, the last variable is categorical).
+#           - Created a new internal function called CheckCategoricalVariableValue() to avoid repeating the same piece of code in two
+#           different places in the function.
+#           - Improved comments describing the process that computes the pred value.
 #
 # TODO:
 # - 2014/01/13: Show the model parameters in the score equation in the order that is shown in the SPSS output.
@@ -3747,6 +3760,29 @@ def Score(
                         Set it to None or 0 to show all the cases in the dataset.
                         Default: 10
     """
+
+    #-------------------------------- Auxiliary functions ------------------------------------
+    # Function that checks whether the value in the dataset to score is one of the possible values taken by the categorical variable in the model
+    def CheckCategoricalVariableValue(case, varName, varType, varValue, checkValue):
+        # Initialize output variable
+        valueFound = True
+        
+        # In the IF below I use the variable type (varType) to write the appropriate comparison between the categorical variable
+        # and its value (varValue) (i.e. by adding quotes if the variable is of type string)
+        if varType and varValue != str(checkValue).strip() or \
+         not(varType) and float(varValue) != checkValue:
+            valueFound = False
+            print "\tSCORE: WARNING - Case %d: Variable %s takes a value that is NOT a possible value for the variable in the model." %(case, varName)
+            print "\t       The value is: %s" %(str(checkValue).strip())
+            print "\t       The score value will be set to missing."
+        elif debug and (i < debugmaxcases or showAll):
+            termExpression = "0*(" + varName + "=" + ((varType and "'") or "") + str(varValue) + ((varType and "'") or "") + ")"
+            print "\t>" + termExpression + operator.repeat(" ", tabSpace-len(termExpression)) + "0.00000000"
+            
+        return valueFound
+    #-------------------------------- Auxiliary functions ------------------------------------
+
+
 
     #------------------------------ Parse input parameters -----------------------------------
     error = False
@@ -4044,14 +4080,17 @@ def Score(
         expression = expression + str(beta0)
         for k in paramsKeys:
             expression = expression + " + \n" + str(paramsDict[k]) + " * "
-            if k[1] == "":
+            # Retrieve the analyzed variable name and value (the value is only meaningful for categorical variables)
+            var   = k[0]        # Variable name in the parameters dataset
+            value = k[1]        # Variable value in the parameters dataset (it is non-empty only for CATEGORICAL variables)
+            if value == "":
                 # Continuous variable because index = ""
-                expression = expression + k[0]
+                expression = expression + var
             else:
                 # Categorical variable => Get the value taken by the variable from catDict dictionary.
-                # Note that the variable is compared against a quoted value when the variable is string (varTypeDict[k[0]] > 0).
-                # Otherwise, no quotes are used ot enclose the value against which it is compared.
-                expression = expression + "(" + k[0] + "=" + ((varTypeDict[k[0]] and "'") or "") + catDict[k] + ((varTypeDict[k[0]] and "'") or "") + ")"
+                # Note that the variable is compared against a quoted value when the variable is string (varTypeDict[var] > 0).
+                # Otherwise, no quotes are used to enclose the value against which it is compared.
+                expression = expression + "(" + var + "=" + ((varTypeDict[var] and "'") or "") + catDict[k] + ((varTypeDict[var] and "'") or "") + ")"
         # End the SPSS compute statement.
         expression = expression + "\n."
         # If the model is logistic regression, compute the estimated probability as the inverse of the logit function.
@@ -4098,8 +4137,13 @@ def Score(
         for i, case in enumerate(dataObj):
             # Initialize the prediction to be equal to the intercept
             pred = beta0
-            categorical = False
-            found = False
+            categorical = False     # Depending on where this variable is used, this flag indicates whether the CURRENTLY analyzed variable 
+                                    # is categorical (this is the case when the value of 'categorical' is set) or
+                                    # whether the PREVIOUSLY analyzed variable is categorical (this is the case when the value of 'categorical'
+                                    # is checked).
+            found = False           # Flag used ONLY for categorical variables, indicating whether the currently analyzed value
+                                    # (coming from the parameters dataset) has been found at the variable corresponding to the currently
+                                    # analyzed parameter in the dataset to score.
             varPrev = ""
             if debug and (i < debugmaxcases or showAll):
                 print "Case: " + str(i+1)
@@ -4107,65 +4151,117 @@ def Score(
             # Iterate over the parameters of the model
             # IMPORTANT: The keys in paramsKeys should be sorted by var and index as was done above!
             for k in paramsKeys:
+                # Retrieve the analyzed variable name and value (the value is only meaningful for categorical variables)
+                var   = k[0]        # Variable name in the parameters dataset
+                value = k[1]        # Variable value in the parameters dataset (it is non-empty only for CATEGORICAL variables)
+                # Retrieve the beta parameter value
                 beta = paramsDict[k]
-                if k[0] == varPrev and found:
+
+                ### 1.- ANALYSES THAT HAVE TO DO WITH INFORMATION COLLECTED AT THE PREVIOUS ITERATION
+                # A.- Check if the current entry corresponds to the same variable as the previous entry (which can only happen
+                # when we are analyzing a categorical variable) and we have already verified that the analyzed variable
+                # takes a valid value in the dataset to score (i.e. found = True).
+                # If this is the case, no need to do anything at the current k loop.
+                if var == varPrev and found:
                     continue
-                if k[0] != varPrev:
+
+                # B.- Check if the currently analyzed variable is different from the previous one
+                # (see below for what this means)
+                if var != varPrev:
+                    # i.e. the currently analyzed beta parameter corresponds to a variable that is DIFFERENT from the variable
+                    # associated to the previously analyzed beta parameter => below I check if the previously analyzed variable
+                    # is categorical and if so I check whether it takes a valid value (based on the values listed in the parameters dataset).
+
+                    # Check whether the PREVIOUSLY analyzed variable in the parameters dataset (which we know is different from the currently
+                    # analyzed variable) was categorical and whether the value taken by the variable in the dataset to score was not yet
+                    # found among the possible values of the variable (as given by the parameters dataset) (this is the meaning of the 'not(found)'
+                    # condition).
+                    # At this point, all possible values of the categorical variable appearing in the parameters dataset have been checked
+                    # and the only value still left to check is the reference value, stored in catDict() with index=0.
+                    # This check is done below and if that last value still is not taken by the variable in the input dataset,
+                    # the predicted value 'pred' is set to missing and a message is issued to inform the situation to the user.
+                    # (Note that the value of variable 'categorical' contains information about the PREVIOUS variable analyzed in the parameters
+                    # dataset and NOT about the current variable analyzed, since 'categorical' was set at the previous k loop.)
                     if categorical and not(found):
-                        # Check if the value (in the dataset to score) taken by the categorical variable analyzed at the previous step
-                        # is among the possible values of that variable when the model was built. At this point, all possible values of
-                        # the categorical variable appearing in the parameters dataset have been considered and the only value
-                        # still left is the reference value which is stored in catDict() with index=0.
-                        # In the IF below I check whether the previous variable is string (varTypeDict[varPrev] > 0) or numeric (varTypeDict[varPrev] = 0)
-                        # so that I write the appropriate comparison between the categorical value corresponding to the current beta with the variable value.
-                        # Note: indVar is computed at the 'try' block just below... (and this is ok because the current block is executed only after the execution of that 'try' block)
-                        if varTypeDict[varPrev] and catDict[(varPrev, '0')] != str(case[indVar]).strip() or \
-                            not(varTypeDict[varPrev]) and float(catDict[(varPrev, '0')]) != case[indVar]:
-                            print "\tSCORE: WARNING - Variable " + varPrev + " takes a value that is NOT a possible value for the variable in the model. The value is: " + str(case[indVar]).strip()
-                        elif debug and (i < debugmaxcases or showAll):
-                            termExpression = "0*(" + varPrev + "=" + ((varTypeDict[varPrev] and "'") or "") + str(catDict[(varPrev, '0')]) + ((varTypeDict[varPrev] and "'") or "") + ")"
-                            print "\t>" + termExpression + operator.repeat(" ", tabSpace-len(termExpression)) + "0.00000000"
-                    # For the currently analyzed parameter, set found to False (meaning that the value of the variable corresponding to the currently analyzed parameter has not yet been found at the corresponding variable in the dataset to score)
+                        # By calling the CheckCategoricalVariableValue() function I check whether the previous variable takes the reference level
+                        # of the categorical variable.
+                        # If this is not the case it means that the value taken by the variable in the dataset to score is invalid and therefore
+                        # the predicted value 'pred' is set to missing.
+                        # Note: dsvalue is computed at the 'try' block just below... (and this is ok because the current block is executed only
+                        # after the execution of that 'try' block at the initial iteration)
+                        if not CheckCategoricalVariableValue(i+1, varPrev, varTypeDict[varPrev], catDict[(varPrev, '0')], dsvalue):
+                            pred = None
+
+                    # For the currently analyzed parameter, set found to False
+                    # (meaning that the value of the variable corresponding to the currently analyzed parameter has not yet been found
+                    # at the corresponding variable in the dataset to score)
                     found = False
-                    # Now look for the variable name associated to the currently analyzed parameter (stored in k[0]) in the dataset to score.
+
+                    # Now look for the variable name associated to the currently analyzed parameter (stored in var) in the dataset to score.
                     try:
-                        indVar = vars.index(k[0].upper())
+                        indVar = vars.index(var.upper())
+                        # Store the value taken in the 'dataset to score' (ds) by the variable corresponding to the currently analyzed beta parameter
+                        dsvalue = case[indVar]
                     except:
-                        print "\tSCORE: WARNING - Variable " + k[0] + " was not found in the dataset to score!"
+                        print "\tSCORE: WARNING - Variable " + var + " was not found in the dataset to score!"
                         # The following two conditions are set so that, in case the variable that was not found in the dataset is categorical, this message is only shown once
-                        # (since the condition above 'if k[0] == varPrev and found' will be satisfied for the next appearance of the categorical variable in the parameters dataset
+                        # (since the condition above 'if var == varPrev and found' will be satisfied for the next appearance of the categorical variable in the parameters dataset
                         # and the loop will 'continue' to the next case)
                         found = True
-                        varPrev = k[0]
+                        varPrev = var
                         continue
-                if k[1] == "":    # k[1] contains the index value of categorical variables that indexes the actual value of the categorical variable. If this value is empty, it means that the variable is continuous.
+
+                ### 2.- ANALYSES THAT HAVE TO DO WITH INFORMATION COLLECTED AT THE CURRENT ITERATION
+                # Check whether the currently analyzed variable is continuous or categorical (based on whether 'value' is empty or not)
+                if value == "":     # CONTINUOUS VARIABLE (since 'value' is the value taken by categorical variables and in this case it is empty)
                     # The variable associated to the currently analyzed parameter is continuous
                     categorical = False
                     found = True
-                    pred = pred + beta*case[indVar]
-                    varPrev = k[0]
+                    # Check if the pred value and the current value of the variable are not missing.
+                    # If any of them is missing, the sum operation to update the pred value cannot be done (it gives an error)
+                    # and the pred value is set to None (i.e. missing).
+                    # Note that despite setting 'pred' to missing we still iterate on all the model parameters because we want
+                    # to inform the user if any of the other variables are missing.
+                    if dsvalue != None:
+                        xbeta = beta*dsvalue
+                        if pred != None:
+                            pred = pred + xbeta
+                    else:
+                        xbeta = None
+                        pred = None
+                        print "\tSCORE: WARNING - Case %d: Variable %s has a missing value!" %(i+1, var)
+                    varPrev = var
                     if debug and (i < debugmaxcases or showAll):
-                        termExpression = str(beta) + "*" + k[0]
-                        print "\t>" + termExpression + operator.repeat(" ", tabSpace-len(termExpression)) + str(beta*case[indVar])
-                else:
-                    # The variable associated to the current analyzed parameter is categorical
+                        termExpression = str(beta) + "*" + var
+                        print "\t>" + termExpression + operator.repeat(" ", tabSpace-len(termExpression)) + str(xbeta)
+                else:               # CATEGORICAL VARIABLE
+                    # The variable associated to the current analyzed beta parameter is CATEGORICAL
                     categorical = True
-                    # In the IF below I check whether the variable is string (varTypeDict[k[0]] > 0) or numeric (varTypeDict[k[0]] = 0)
+                    # In the IF below I check whether the variable is string (varTypeDict[var] > 0) or numeric (varTypeDict[var] = 0)
                     # so that I write the appropriate comparison between the categorical value corresponding to the current beta with the variable value.
-                    if varTypeDict[k[0]] and str(catDict[k]) == str(case[indVar]).strip() or \
-                     not(varTypeDict[k[0]]) and float(catDict[k]) == case[indVar]:
+                    if varTypeDict[var] and str(catDict[k]) == str(dsvalue).strip() or \
+                     not(varTypeDict[var]) and float(catDict[k]) == dsvalue:
                         found = True
                         pred = pred + beta
                         if debug and (i < debugmaxcases or showAll):
-                            termExpression = str(beta) + "*(" + k[0] + "=" + ((varTypeDict[k[0]] and "'") or "") + str(catDict[k]) + ((varTypeDict[k[0]] and "'") or "") + ")"
+                            termExpression = str(beta) + "*(" + var + "=" + ((varTypeDict[var] and "'") or "") + str(catDict[k]) + ((varTypeDict[var] and "'") or "") + ")"
                             print "\t>" + termExpression + operator.repeat(" ", tabSpace-len(termExpression)) + str(beta)
-                    varPrev = k[0]
-                  
-            # Compute the probability from the predicted value stored in pred if the model is a logistic regression model
-            if debug and (i < debugmaxcases or showAll):
-                print "\t>" + operator.repeat(" ", tabSpace-len("SUM(z): ")) + "SUM(z): " + str(pred)
+                    varPrev = var
+
+            # FINAL CHECK: Check if the last analyzed variable was categorical and if the value taken in the dataset to score is valid or not
+            # (this is the same process that is done within the loop, which however is not run on the LAST variable if it is categorical,
+            # since the check is done at the following iteration)
+            if categorical and not(found):
+                if not CheckCategoricalVariableValue(i+1, varPrev, varTypeDict[varPrev], catDict[(varPrev, '0')], dsvalue):
+                    pred = None
+
+            # Show the score
             if model == "logit":
-                pred = 1 / (1 + exp(-pred))
+                if debug and (i < debugmaxcases or showAll):
+                    print "\t>" + operator.repeat(" ", tabSpace-len("SUM(z): ")) + "SUM(z): " + str(pred)
+                # Compute the score as the probability of the event of interest
+                if pred != None:
+                    pred = 1 / (1 + exp(-pred))
             if debug and (i < debugmaxcases or showAll):
                 print "\t>" + operator.repeat(" ", tabSpace-len("SCORE: ")) + "SCORE: " + str(pred)
             # Store the predicted value (score) in the dataset to score
