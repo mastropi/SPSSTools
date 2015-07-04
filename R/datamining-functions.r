@@ -75,6 +75,9 @@
 # -[DONE-2014/07/31] 2014/07/31: Extend the application of this function to categorical x values that have MISSING values (NA), so that missing values are treated
 # as a different valid category. Currently, when running the function on an x with missing values, these values are removed, but I don't know
 # where in the code!!
+# - 2015/06/27: Allow an option that returns new variables with the categories already assigned to the new groups, so that the user doesn't have
+# to think of calling AssignCategories(). In fact, based on the automatic categorization, the user can even think of replacing the assigned
+# value with the value they want that is more appropriate to their understanding of the data.
 GroupCategories = function(
 		x,									# Input categorical variable to analyze
 		y,									# Target variable,
@@ -623,6 +626,10 @@ GroupCategories = function(
 
 
 ####################################### AssignCategories ######################################
+# TODO:
+# - 2015/06/27: Add a parameter so that the user can specify that if a value is not found among the original values to be categorized
+# they can decide to assign it to the OTHER group or leave it at its original value. Right now it is left untouched at its original value.
+# Also, RAISE A WARNING when a value found in the input data is not a valid value! 
 AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 # Created:			27-Mar-2014
 # Author:				Daniel Mastropietro

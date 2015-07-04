@@ -278,7 +278,7 @@ datamining-functions.r:
 	- DistributionsByGroup(): changed the behaviour of the function when stats="": before it meant use the default value of stats (="q5 median q95") and now it means do NOT show any statistics lines on the distributions plot. The change was due to intuition (i.e. intuitively a user could pass stats="" to indicate that they don't want to see any statistics lines on the distribution plot.
 
 
-commit of Tools: 2015/04/17 - 2015/05/26 [COMMITTED]
+commit of Tools: 2015/04/17 - 2015/06/26 [COMMITTED]
 ----------------------------------------
 Fixed bugs in Score() function when variables have missing values
 
@@ -289,3 +289,22 @@ spssmacros.r:
 		- In the process that computes the pred value, added the same check I do on categorical variables inside the loop, right after the loop so that this check is performed also to the last analyzed variable (in case it is categorical). Note that the described situation of having the last analyzed variable as categorical is very rare (either all variables are categorical or when sorting alphabetically, the last variable is categorical).
 		- Created a new internal function called CheckCategoricalVariableValue() to avoid repeating the same piece of code in two different places in the function.
 		- Improved comments describing the process that computes the pred value.
+
+
+commit of Tools: 2015/04/27 - 2015/07/
+----------------------------------------
+Removed intermediate EXECUTE statements from some Python functions
+
+spssmacros.r:
+- Updated functions:
+	- PartialPlot():
+		- Removed unnecessary intermediate EXECUTE statements in order to avoid unnecessary pass through the data! (as suggested by Jon Peck).
+		Note that this does NOT imply removing all intermediate EXECUTE statements. There is one that I had to keep when creating the @rsquares dataset, but I don't understand why...
+		- Added a new ADD FILES statement to keep just the variables that are used during the partial plot calculation. This was done in an attempt to make the process faster as the number of variables stored in the input dataset may be potentially large and since (a copy of) the input dataset is updated during the process by adding new variables, I want to reduce as much as possible the time needed for those updates.
+		- Moved the application of any WHERE conditions after verifying that it makes sense to continue with the process (i.e. that variable 'error' is not False) in order to avoid executing these conditions when they are not necessary because the process will in any case abort.
+
+spssmacrosR.r:
+	- Completed a truncated comment that I had written on what the RCopyVariables() function does.
+
+datamining-functions.r:
+	- Added one TODO task to AssignCategories() and one to GroupCategories().

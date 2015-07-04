@@ -1066,9 +1066,7 @@ else if lower(%(summary_statvar)s) = '5%% trimmed mean'.
 else if lower(%(summary_statvar)s) = 'interquartile range'.
 + compute %(summary_statvar)s = 'IQR'.
 end if.
-execute.
 select if any(lower(%(summary_statvar)s),%(statnames)s).
-execute.
 
 sort cases by var %(byvars)s %(summary_statvar)s.
 casestovars
@@ -1100,7 +1098,6 @@ get file='%(pctldata)s'
 /drop=Command_ Subtype_ Label_.
 dataset name @pctl.
 select if %(pctl_descvar)s = 'Weighted Average(Definition 1)'.
-execute.
 delete variables %(pctl_descvar)s.
 sort cases by var %(byvars)s.
 """ %locals())
@@ -1116,7 +1113,6 @@ sort cases by var %(byvars)s.
         str(percentiles and "/file=@pctl"       or ""),
         "/by var " + byvars,
         "/keep=" + byvars + " var n nmiss pmiss " + OrderStatFinal + ".",
-        "execute.",
         "dataset name " + outdata + ".", formatst])
 
     # Close temporary datasets and delete temporary files
@@ -1499,12 +1495,6 @@ dataset copy @data.
 dataset activate @data.
 """)
 
-    #-- WHERE
-    if where:
-        spss.Submit(r"""
-select if (%(where)s).
-execute.""" %locals())
-
     #-- TARGET
     targetlist, target = BuildVarListAndString(target)
     if len(targetlist) != 1:
@@ -1566,7 +1556,7 @@ execute.""" %locals())
         if scoreOrig:
             # In case showfit = False and there is a score variable to plot,
             # then set BOTH to False as there is no sense in showing the partial plot
-            # when no model fit is shown
+            # when no model fit is shown.
             both = False
 
     #-- VARCLASS, VARNUM
@@ -1673,13 +1663,12 @@ execute.""" %locals())
             print "\n"
 
     # After showing the function call, check whether the score variable has the same name as the analyzed variable 'var'
-    # (This happens when we want to evaluate the model fit in terms of the predicted probability, in which case the 'var' variable must be equal to the 'score' variable.
+    # (This happens when we want to evaluate the model fit in terms of the predicted probability, in which case the 'var' variable must be equal to the 'score' variable.)
     if scoreOrig == var:
         # Make a copy of the score variable into a variable whose name is stored in variable 'score_' which is the name used to rename the variable stored in 'scoreOrig' below, for processing.
         spss.Submit(r"""
 dataset activate @data.
 compute %(score_)s = %(scoreOrig)s.
-execute.
 """ %locals())
         # Change the value of scoreOrig to the same value stored in variable 'score_' which is the variable name to which scoreOrig is RENAMEd below during processing.
         # (note that there is no problem in renaming to the same name)
@@ -1695,6 +1684,21 @@ execute.
         return
     #-------------------------------- Parse input parameters ----------------------------------
 
+    # Apply any existing WHERE condition
+    if where:
+        spss.Submit(r"select if (%(where)s)" %locals())
+
+    # Keep just the necessary data for this analysis (i.e. just the necessary variables, NOT all the variables in the input dataset which may be many!)
+    # Note that any WHERE condition has already been applied above, so there is no problem in not keeping variables that are mentioned in that WHERE condition.
+    spss.Submit(r"""
+add files file=* /keep=
+%(target)s
+%(var)s
+%(varclass)s
+%(varnum)s
+%(weight)s
+%(scoreOrig)s.
+""" %locals())
 
     #----------------------------------- Partial Regressions ----------------------------------
     if not output:
@@ -1734,7 +1738,7 @@ dataset activate @rsquare0.
 ADD FILES file=* /rename=(CoxSnellRSquare=RSquare) /keep=RSquare.
 string type(A32).
 compute type = 'Impact Plot'.
-execute.""")
+""")
 
         else:
             # Fit the regression excluding variable 'var'
@@ -1758,7 +1762,7 @@ OMSEND tag = ['rsquare'].""" %locals())
 dataset activate @rsquare0.
 SELECT IF any(Var1,'Error','Corrected Total').
 ADD FILES file=* /keep=Var1 TypeIIISumofSquares.
-execute.
+
 FLIP VARIABLES=TypeIIISumofSquares /NEWNAME=Var1.
 dataset close @rsquare0.
 dataset name @rsquare0.
@@ -1766,7 +1770,7 @@ string type(A32).
 compute type = 'Impact Plot'.
 compute RSquare = 1 - Error / Corrected_Total.
 add files file=* /keep=type RSquare.
-execute.""")
+""")
             
         # Compute the residuals of the analysis variable against the other variables
         spss.Submit("dataset activate @data")
@@ -1797,7 +1801,8 @@ dataset activate @rsquare.
 add files file=* /keep=RSquare.
 string type(A32).
 compute type = 'Partial Plot'.
-execute.""")
+execute.
+""")    ## Note: the last statement NEEDS an EXECUTE, otherwise the TYPE variable in the @rsquare dataset is never set (Don't understand the logic of this behaviour of EXECUTE though)
 
         # Close all open OMS
         spss.Submit("OMSEND")
@@ -1806,7 +1811,6 @@ execute.""")
         # Put all the R-Square information together (the final dataset @rsquares contains 2 variables: type and RSquare)
         spss.Submit(r"""
 add files file=@rsquare0 /file=@rsquare.
-execute.
 dataset name @rsquares.
 dataset close @rsquare0.
 dataset close @rsquare.""")
@@ -1823,7 +1827,7 @@ compute zry_ = 0.
 compute zpr_ = 0.
 compute pr_ = 0.
 compute rr_ = 0.
-execute.""")
+""")
         # Create a dummy @rsquares dataset with missing values for RSquare
         spss.Submit(r"""
 DATA LIST FIXED /type 1-32 (A) RSquare 34.
@@ -1864,11 +1868,11 @@ variable labels x_ "" y_ "" x_cat_ "" rx_cat_ "" """ %locals() + (scoreOrig and 
         spss.Submit(r"""
 *compute pred_ = 1 / (1 + exp( -( ln((py_+0.0001)/(1-py_+0.0001)) + pr_ ) )).
 compute pred_ = py_ + pr_.
-execute.""")
+""")
     else:
         spss.Submit(r"""
 compute pred_ = py_ + pr_.
-execute.""")
+""")
 
     # Compute the average values of the variables to plot in the vertical axes of the Impact Plot
     # and the Partial Plot.
@@ -1894,12 +1898,16 @@ OMSEND.""" %locals())
     # add the R-Square from the partial regression
     spss.Submit("dataset activate " + outdata)
 
+    # IMPORTANT NOTE: (2015/06/30) The following MATCH FILES by TYPE work because the possible names of TYPE
+    # are "Impact Plot" and "Partial Plot" and they are added in this order to the @rsquares dataset, which
+    # is the alphabetical order! If this were not the alphabetical order there would be an error when running
+    # the MATCH FILES stating that the datasets to merge are not sorted...
     spss.Submit(r"""
 string var (A64).
 compute var = '%(var)s'.
 if index(Label_,'* x_cat_')  > 0 Label_ = 'Impact Plot'.
 if index(Label_,'* rx_cat_') > 0 Label_ = 'Partial Plot'.
-execute.
+
 match files file=*
 /rename=(
 Label_
@@ -1932,7 +1940,7 @@ predWO
 nr
 nx)
 /table=@rsquares
-/by=type
+/by type
 /keep=
 var
 type
@@ -1956,7 +1964,6 @@ nx
     # Remove the Total information added at the end with value tile = "Total"
     spss.Submit(r"""
 select if lower(tile) <> 'total'.
-execute.
 dataset close @rsquares.""")
 
     # Save dataset used for the plot if requested.
@@ -2455,7 +2462,6 @@ def PartialPlots(
                 print "Adding data for plotting to the output dataset\n"
             spss.Submit(r"""
 add files file=@pplot.
-execute.
 dataset name %(outdata)s.""" %locals())
         else:
             if log:
@@ -3287,16 +3293,16 @@ def PlotTargetVSCat(
     errmsg = ""     # This variable collects all the generated error messages to be shown before exiting (return)
     
     if data and not isinstance(data,str):
-        errmsg = errmsg + "\nPARTIALPLOT: ERROR - Parameter DATA must be of type string (value given: " + str(data) + ")"
+        errmsg = errmsg + "\nPLOTTARGETVSCAT: ERROR - Parameter DATA must be of type string (value given: " + str(data) + ")"
         error = True
     if where and not isinstance(where,str):
-        errmsg = errmsg + "\nPARTIALPLOT: ERROR - Parameter WHERE must be of type string (value given: " + str(where) + ")"
+        errmsg = errmsg + "\nPLOTTARGETVSCAT: ERROR - Parameter WHERE must be of type string (value given: " + str(where) + ")"
         error = True
     if not isinstance(target,str):
-        errmsg = errmsg + "\nPARTIALPLOT: ERROR - Parameter TARGET is required and must be of type string (value given: " + str(target) + ")"
+        errmsg = errmsg + "\nPLOTTARGETVSCAT: ERROR - Parameter TARGET is required and must be of type string (value given: " + str(target) + ")"
         error = True
     if not isinstance(var,str):
-        errmsg = errmsg + "\nPARTIALPLOT: ERROR - Parameter VAR is required and must be of type string (value given: " + str(var) + ")"
+        errmsg = errmsg + "\nPLOTTARGETVSCAT: ERROR - Parameter VAR is required and must be of type string (value given: " + str(var) + ")"
         error = True
     if not savedir:
         savedir = tempdir_
@@ -3969,8 +3975,8 @@ def Score(
             # Update the catDict dictionary (note that the key for 'index' is set to be string because the 'index' key stored in the parameters dictionary below (paramsDict) is also string.
             # In fact the key values for both catDict and paramsDict need to match!
             catDict[(var.strip(), str(index))] = value.strip()
-    
-        dataObj.close()    # Apparently this is equivalent to del dataObj
+
+        dataObj.close()    # Apparently deleting the variable with 'del dataObj' would also close the cursor
 
         # Close dataCodings dataset if it was read from a file
         if dataCodings == "@codings_":
@@ -4002,7 +4008,7 @@ def Score(
             indStep = step.index("Step")        # This statement could probably be removed because indStep is never used... (but I leave it just in case)
             step = int(step[len("Step ")-1:])
         except:
-            # This is for the parameters table generated by the REGRESSION command in SPSS
+            # This is for the parameters table generated by the REGRESSION command in SPSS (i.e. linear regression case)
             step = int(step)
         # Reset the position of the cursor
         dataObj.restart()
@@ -4011,7 +4017,7 @@ def Score(
     # Read the parameter values and store them in a dictionary indexed by the variable name and index value of categorical variables
     paramsDict = {}
     # Initialize the intercept to 0 in case the model does not have an intercept
-    beta0 = 0  
+    beta0 = 0
     for case in dataObj:
         caseStep = case[0]
         var = case[1]

@@ -135,7 +135,7 @@ def RCopyVariables(**kwargs):
     and its value is the value of the Python variable to copy to it.
     Example: (run within a Python block)
         RCopyVariables(varnum=varnum, varc=varclass)
-    This creates 
+    This creates variables varnum and varc in R containing respectively the values of variables varnum and varclass defined in Python.
     """
     
     ### NOTE 1: **kwargs is a dictionary containing name-value pairs stored as key-value. The keys can be referenced by kwargs.keys().
