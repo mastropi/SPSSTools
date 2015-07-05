@@ -291,9 +291,9 @@ spssmacros.r:
 		- Improved comments describing the process that computes the pred value.
 
 
-commit of Tools: 2015/04/27 - 2015/07/
+commit of Tools: 2015/04/27 - 2015/07/04 [COMMITTED]
 ----------------------------------------
-Removed intermediate EXECUTE statements from some Python functions
+Removed intermediate EXECUTE statements from PartialPlot()
 
 spssmacros.r:
 - Updated functions:
@@ -308,3 +308,16 @@ spssmacrosR.r:
 
 datamining-functions.r:
 	- Added one TODO task to AssignCategories() and one to GroupCategories().
+
+
+commit of Tools: 2015/07/05 - 2015/07/05 [COMMITTED]
+----------------------------------------
+Implemented piecewise linear WOE variables in InformationValue()
+
+datamining-functions.r:
+- Updated functions:
+	- InformationValue():
+		- Three new parameters:
+			- woeprefix, woesuffix: to specify the prefix and suffix for the WOE variables to create.
+			- woevartype: to specify what type of WOE variables to create, whether constant piecewise (traditional way, done by TIMi) or piecewise linear (new way proposed by Maria Teresa from NAT).
+		- Implemented the code to create piecewise linear WOE variables as suggested by Maria Teresa.

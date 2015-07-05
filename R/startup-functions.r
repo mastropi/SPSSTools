@@ -248,11 +248,11 @@ extract <- function(intervals, digits=2, what=c("midpoint", "lower", "upper"))
 {
 	# Parse input parameters
 	what = match.arg(what) 
-	
+
 	# Parse x
 	lower = as.numeric(gsub(",.*","",gsub("\\(|\\[|\\)|\\]","", intervals)))
 	upper = as.numeric(gsub(".*,","",gsub("\\(|\\[|\\)|\\]","", intervals)))
-	
+
 	# Define the output value
 	out =	switch (tolower(what),
 								midpoint 	= round(lower+(upper-lower)/2, digits),

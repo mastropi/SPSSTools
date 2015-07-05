@@ -1547,17 +1547,25 @@ if (save) {
 #								- data frame management with data.table package
 #								For examples see this post by Carlos Gil Bellosta:
 #								http://www.datanalytics.com/2014/03/25/totales-agregados-por-bloques-en-tablas/
+# - 2015/07/05: IV table as input dataset.
+#								Add the possibility of passing a table containing the Information Value already computed for a set of variables
+#								in order to generate the SPSS code from it.
+#	- 2015/07/05: Create WOE variables in R.
+#								Add the option of creating the WOE variables directly in the R dataset, in addition to generating the SPSS code.
 InformationValue = function(
-  data,             # Dataset containing the variables to analyze listed in 'vars', 'varclass' and/or 'varnum
-  target,           # Either an unquoted variable name or a string indicating the name of the binary target variable in 'data' on which the Information Value is computed
-  vars=NULL,        # Blank- or line-separated string with the names of the variables to analyze (they are assumed to be continuous)
-  varclass=NULL,    # Blank- or line-separated string with the names of the CATEGORICAL variables to analyze
-  varnum=NULL,      # Blank- or line-separated string with the names of the CONTINUOUS  variables to analyze (these variables together with those specified in VARS determine the continuous variables to analyze)
-  groups=20,        # Number of groups into which the continuous variables are binned (equal-size bins)
-  breaks=NULL,      # Vector defining the upper boundaries of the bins into which ALL CONTINUOUS variables are binned
-  stat="mean",      # Statistic to compute on each bin of the analyzed continuous variables
-  event="LAST",     # Event of interest ("FIRST" or "LAST") which is used as numerator in the WOE formula
-  spsscode=FALSE)		# Whether to include the SPSS code to create WOE variables as part of the output
+  data,             		# Dataset containing the variables to analyze listed in 'vars', 'varclass' and/or 'varnum
+  target,           		# Either an unquoted variable name or a string indicating the name of the binary target variable in 'data' on which the Information Value is computed
+  vars=NULL,        		# Blank- or line-separated string with the names of the variables to analyze (they are assumed to be continuous)
+  varclass=NULL,    		# Blank- or line-separated string with the names of the CATEGORICAL variables to analyze
+  varnum=NULL,      		# Blank- or line-separated string with the names of the CONTINUOUS  variables to analyze (these variables together with those specified in VARS determine the continuous variables to analyze)
+  groups=20,        		# Number of groups into which the continuous variables are binned (equal-size bins)
+  breaks=NULL,      		# Vector defining the upper boundaries of the bins into which ALL CONTINUOUS variables are binned
+  stat="mean",      		# Statistic to compute on each bin of the analyzed continuous variables
+  event="LAST",     		# Event of interest ("FIRST" or "LAST") which is used as numerator in the WOE formula
+  spsscode=FALSE,				# Whether to include the SPSS code to create WOE variables as part of the output
+	woeprefix="woe_",			# Prefix to use for the WOE variables
+	woesuffix="",					# Suffix to use for the WOE variables
+	woevartype="linear")	# Method to create the WOE variables. Accepted values are: "constant" for piecewise constant mapping or "linear" for piecewise linear interpolation between bin centers. 
   # Created: 2013/07/25
   # Modified: 2013/07/25
   # Descrtiption: Information Value for continuous and categorical variables on a binary target
@@ -1752,8 +1760,13 @@ InformationValue = function(
   # (this is necessary when there is only ONE variable to analyze, in which case the column name
   # assigned to the single column in 'data' is, for instance, "data[,c(varclass)])")
   colnames(data) = c(varclass, varnum)  # Note that this is fine because in the above assignment, the columns of 'data' are read in the order given!
+	
+	### WOEVARTYPE
+	# bLinear: Flag indicating whether the interpolation is linear or constant (b = "Boolean variable")
+	bLinear = FALSE
+	if (tolower(woevartype) == "linear") bLinear = TRUE
   #------------------------------- Parse input parameters -------------------------------------
-  
+
   # Create the data frames to store the WOE and IV results for each variable
   WOE = as.data.frame(matrix(nrow=0, ncol=9))
   colnames(WOE) = c("var", "type", "group", "nobs", "pctClassFIRST", "pctClassLAST", stat, "woe", "iv")
@@ -1916,16 +1929,27 @@ InformationValue = function(
   	bin = 1			# Counter of the bins or groups within each variable
   	ii = 1			# output index (used for matrix SPSS)
   	imax = nrow(WOE)
+		
+		# Compute the slopes between consecutive bins if linear interpolation is requested for the WOE variables
+		# Note that the slopes correspond to the slope between the current bin and the next bin (as opposed to "between the previous bin and the current bin").
+		if (bLinear) {
+			# Get the values representing each bin (usually the bin center such as the mean)
+			xvalues = WOE[,stat]
+			# Compute the slopes for the linear interpolation between consecutive bins 
+			woeslopes = diff(WOE$woe) / diff(xvalues)	# Note that diff(xvalues) should NEVER be 0, as the xvalues should always be different (by construction of the equal size binning) 
+		}
+
+		# Loop over all the bins
   	for (i in 1:imax) {
-  		vname = WOE$var[i]												# Variable name
-  		newvname = paste("woe_", vname, sep="")		# Variable name for the WOE variable
-  		vtype = vartypes[[vname]]									# Variable type: character or numeric
-  		type = WOE$type[i]												# Type of variable: categorical or continuous
-  		group = WOE$group[i]											# Group or bin that is currently analyzed
+  		vname = WOE$var[i]																		# Variable name
+  		newvname = paste(woeprefix, vname, woesuffix, sep="")	# Variable name for the WOE variable
+  		vtype = vartypes[[vname]]															# Variable type: character or numeric
+  		type = WOE$type[i]																		# Type of variable: categorical or continuous
+  		group = WOE$group[i]																	# Group or bin that is currently analyzed
   		nextgroup = ""; if (i < imax) { nextgroup = WOE$group[i+1] }
   		# 1.- Check if this is an actual group
   		if (is.na(group)) {	# NA indicates that a new variable starts (since it is used as separator among variables in the WOE table)
-  			bin = 1
+  			bin = 1		# This value of 'bin' is only used in the next iteration...
   		} else {
   			# 2.- Check if this group is a Missing value in the original variable
   			if (group == "NaN") {
@@ -1944,20 +1968,49 @@ InformationValue = function(
 						# Get the numeric bounds of the current group
 						bounds = getBounds(group)
 						# 5.- Check if:
-						#			- the last group of the variable (nextgroup==NA) OR
-						#			- this is the very last group (nextgroup=="") OR
-						#			- the next group is Missing (nextgroup=="NaN")
+						#			- this is the last group of the variable (nextgroup==NA) OR
+						#			- it is the very last group (nextgroup=="") OR
+						#			- the next group is Missing (nextgroup=="NaN") (recall that all "NaN" values are placed at the last bin)
 						if (is.na(nextgroup) || nextgroup %in% c("", "NaN")) {
-							# No upper bound on the condition
-							expr = paste("if (", bounds$lower, bounds$opleft, vname, ")", newvname, "=", WOE$woe[i], ".")
+							#---------------- LAST BIN: No upper bound on the condition -----------------
+							if (bLinear) {
+								# Assign a constant WOE value between the BIN CENTER and Infinity
+								# Intervals are always open to the left and close to the right, regardless of the bin boundaries (whether open or closed)
+								expr = paste("if (", xvalues[i], "<", vname, ")", newvname, "=", WOE$woe[i], ".")
+							} else {
+								# Assign a constant WOE value from the LEFT BOUND of the bin to Infinity
+								expr = paste("if (", bounds$lower, bounds$opleft, vname, ")", newvname, "=", WOE$woe[i], ".")
+							}
 						} else {
 							# 6.- Check if this is the first group of the variable
 							if (bin == 1) {
-								# No lower bound on the condition
-								expr = paste("if (", vname, bounds$opright, bounds$upper, ")", newvname, "=", WOE$woe[i], ".")
+								#--------------- FIRST BIN: No lower bound on the condition ----------------
+								if (bLinear) {
+									# Two expressions are prepared here:
+									# - expr1: assigns a constant WOE value from -Infinity to the BIN CENTER
+									# - expr2: assigns a linear interpolation from the bin center to the next bin
+									# We need to do the two expressions right here because in the next iteration we will be already
+									# in the second bin and we would have lost the linear interpolation between the first and second bin.
+									# Intervals are always open to the left and close to the right, regardless of the bin boundaries (whether open or closed)
+									expr1 = paste("if (", vname, "<=", xvalues[i], ")", newvname, "=", WOE$woe[i], ".")
+									expr2 = paste("if (", xvalues[i], "<", vname, " and ", vname, "<=", xvalues[i+1], ")", newvname, "=", WOE$woe[i], "+", woeslopes[i], "* (", vname, "-", xvalues[i], ").")
+									expr = paste(expr1, expr2, sep="\n")
+								} else {
+									# Assign a constant WOE value from -Infinity to the RIGHT BOUND of the bin
+									expr = paste("if (", vname, bounds$opright, bounds$upper, ")", newvname, "=", WOE$woe[i], ".")
+								}
 							} else {
-								# Both lower and upper bound on the condition
-								expr = paste("if (", bounds$lower, bounds$opleft, vname, " and ", vname, bounds$opright, bounds$upper, ")", newvname, "=", WOE$woe[i], ".")
+								#----------------------------- MIDDLE BIN ----------------------------------
+								if (bLinear) {
+									# Assign the value to the new WOE variable resulting from a linear interpolation between the current bin value (xvalues[i]) and the next bin value (xvalues[i+1])
+									# (note that xvalues[i+1] always exist because we are sure that we are NOT at the last bin)    
+									# Intervals are always open to the left and close to the right, regardless of the bin boundaries (whether open or closed)
+									expr = paste("if (", xvalues[i], "<", vname, " and ", vname, "<=", xvalues[i+1], ")", newvname, "=", WOE$woe[i], "+", woeslopes[i], "* (", vname, "-", xvalues[i], ").")
+								} else {
+									# Assign the WOE variable to the whole bin.
+									# Both lower and upper bound are used on the condition on the input variable.
+									expr = paste("if (", bounds$lower, bounds$opleft, vname, " and ", vname, bounds$opright, bounds$upper, ")", newvname, "=", WOE$woe[i], ".")
+								}								
 							} # (6)
 						} # (5)
 					} # (3)
