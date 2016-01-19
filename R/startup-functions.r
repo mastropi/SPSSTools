@@ -45,6 +45,13 @@
 # may not be so easily done because this wish may be different for each plotted variable, which is especially so when doing pairs plot.
 # - 2014/08/25: It seems that using list(...) it is possible to read the parameters passed as part of the ... input parameters section! Try using this
 # method instead of match.call() when parsing input parameters.
+# - 2016/01/17: Rewrite functions so that newer powerful packages for data manipulation and plotting are used:
+#		- dplyr for data manipulation (see http://scicomp2014.edc.uri.edu/posts/2014-04-14-Smith.html for an example and how it compares with plyr)
+#			(dplyr uses the %>% pipe operator!)
+#		- ggplot2 or ggvis for better quality graphs. In the end, alghough ggplot seems complicated, it may not be so...
+# 		(ggvis uses the %>% pipe operator!)
+#		HOWEVER, ggvis does NOT support all plots that ggplot2 supports, e.g. facetted (i.e. grid) plots (ref: http://stats.stackexchange.com/questions/117078/for-plotting-with-r-should-i-learn-ggplot2-or-ggvis)
+#		See also NAT Tools -> Deployment for naming conventions and references for the ggplot and ggvis packages (dated 04-Apr-2015)
 #
 
 # Necessary Libraries
@@ -76,7 +83,7 @@ panel.smooth <- function(x, y, group, ...)
 # pairsYAxisPosition
 # checkVariables
 # parseVariable
-# midpoints
+# extract
 # who
 # whos
 # ellipse, ellipsem, angle (auxiliary functions for plot.outliers2d)
@@ -272,7 +279,7 @@ who = function(envir=.GlobalEnv)
 # List the names of the variables existing in an environment and their sizes in a matrix-like form
 whos = function(envir=.GlobalEnv, sortby=c("name","size"), decreasing=FALSE)
 # Created: 			2008
-# Modified: 		09-Sep-2008
+# Modified: 		07-Jul-2015
 # Author: 			Daniel Mastropietro
 # Description: 	Function that implements the Matlab-like function 'whos' showing the objects defined in memory
 #								along with their sizes, optionally sorting by size in ascending or descending order.
@@ -289,7 +296,9 @@ whos = function(envir=.GlobalEnv, sortby=c("name","size"), decreasing=FALSE)
 		size = size[order(names(size), decreasing=TRUE)]
 	}
 	
+	cat("Size of objects in bytes\n")
 	print(as.data.frame(size))
+	cat("Size of objects in bytes\n")
 }
 
 # Three auxiliary functions used by plot.outliers2d
@@ -1777,6 +1786,10 @@ panel.outliers2d = function(x, y, id=NULL, center=median, scale=cov, cutoff=0.01
 # graph to an existing plot (using add=TRUE). The contour() function does not produce colors to indicate the height of the contour,
 # however I think the colors can be produced by calling the image() function first, or perhaps better my own plot.image() or panel.image() function.
 # For examples of using contour() in this way, see the examples of the hist2d() function in the gplots package.
+#
+# - 2016/01/17: Generate the plots using ggplot2 package for better quality. See this post for an example of generating biplots with ggplot2:
+# http://stackoverflow.com/questions/6578355/plotting-pca-biplot-with-ggplot2
+# Here we can also see the difference between the regular biplot() function... the ggplot output is much better!!
 biplot.custom = function(x, pc=1:2, arrowsFlag=TRUE, pointsFlag=FALSE, outliersFlag=TRUE, pointlabels=NULL, thr=4, outliersMaxPct=0.5, ...)
 # Created:      2013/08/28
 # Modified:     2013/08/28

@@ -53,6 +53,14 @@
 #								plot makes sense) --although 0/1 binary variables might still be considered as continuous in case they were not specified
 #								as factor variables by the user!
 #
+# - 2016/01/17: Rewrite functions:
+#								Rewrite the functions so that newer powerful packages for data manipulation and plotting are used:
+#								- dplyr for data manipulation (see http://scicomp2014.edc.uri.edu/posts/2014-04-14-Smith.html for an example and how it compares with plyr)
+#									(dplyr uses the %>% pipe operator!)
+#								- ggplot2 or ggvis for better quality graphs. In the end, alghough ggplot seems complicated, it may not be so...
+# 								(ggvis uses the %>% pipe operator!)
+#								See also NAT Tools -> Deployment for naming conventions and references for the ggplot and ggvis packages (dated 04-Apr-2015)
+#
 
 
 ######################################## GroupCategories ######################################
@@ -1799,7 +1807,14 @@ InformationValue = function(
     data[is.na(data[,v]), v] = NaN
     ## IMPORTANT: DO NOT SET THE ANALYZED VARIABLE 'v' AS A factor BECAUSE THIS MAKES THE RESULT OF THE table() FUNCTION NOT HANDLE Inf and NaN values correctly (they may not be counted for instance! --don't know WHY)
     tab = as.data.frame(table(data[,v], useNA="always"))
-    values = factor(tab[,1])  #  Note: in principle the output of tab[,1] is already a factor but just in case I still use the factor() function here
+    values = factor(tab[tab[,2]>0,1]) 
+      ## Notes:
+      ## - It is important to filter the frequency table to those values having frequency > 0 (tab[,2]>0)
+      ## because it may well happen that categorical variables (factors) have more levels than there
+      ## are in the data (just because e.g. a value previously existed and then was deleted from the data)
+      ## The aforementioned condition ensures that the dimensions of the matrices on the LHS and RHS
+      ## of the assignment below to WOE[rows,] are consistent.
+      ## - In principle the output of tab[,1] is already a factor but just in case I still use the factor() function here
     nlevels = nlevels(values)
 
     # Compute the Information Value
@@ -1925,7 +1940,11 @@ InformationValue = function(
   
   # Create SPSS code for creating WOE variables
   if (spsscode) {
-  	SPSS = matrix(nrow=nrow(WOE)-sum(WOE$var=="--TOTAL--"), ncol=1, data="")
+  	# Prepare the output data with the code
+  	nrows = nrow(WOE) - sum(WOE$var=="--TOTAL--")
+  	SPSS = as.data.frame( matrix(nrow=nrows, ncol=2, data="") )
+
+  	# Start the iteration on the WOE information
   	bin = 1			# Counter of the bins or groups within each variable
   	ii = 1			# output index (used for matrix SPSS)
   	imax = nrow(WOE)
@@ -1953,7 +1972,7 @@ InformationValue = function(
   		} else {
   			# 2.- Check if this group is a Missing value in the original variable
   			if (group == "NaN") {
-		  		expr = paste("if ( missing(", vname, ") )", newvname, "=", WOE$woe[i], ".")
+	  			expr = paste("if ( missing(", vname, ") )", newvname, "=", WOE$woe[i], ".")
   			} else {
   				# 3.- Check if the current variable is categorical
   				if (type == "categorical") {
@@ -2584,14 +2603,14 @@ roc <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.type 
   }
   
   if (pos == 1) {
-    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color,
+    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'o', pch=21, col=color, bg=color,
       xlim = c(0, 1), ylim = c(0, 1),
       xlab = xlab, ylab = ylab,
       main = title, cex.main=cex.main, lwd=lwd)
     lines(c(0, 1), c(0, 1), col = 'red', lty = 3)
   } else{
     par(new=TRUE)
-    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'b', pch=21, col=color, bg=color, 
+    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'o', pch=21, col=color, bg=color, 
       xlim = c(0, 1), ylim = c(0, 1), lwd=lwd,
       ann = FALSE, axes = FALSE)
   }

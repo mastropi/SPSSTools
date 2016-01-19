@@ -321,3 +321,18 @@ datamining-functions.r:
 			- woeprefix, woesuffix: to specify the prefix and suffix for the WOE variables to create.
 			- woevartype: to specify what type of WOE variables to create, whether constant piecewise (traditional way, done by TIMi) or piecewise linear (new way proposed by Maria Teresa from NAT).
 		- Implemented the code to create piecewise linear WOE variables as suggested by Maria Teresa.
+
+
+commit of Tools: 2015/07/06 - 2016/01/19 [COMMITTED]
+----------------------------------------
+Fixed error in InformationValue() on cat variables
+
+datamining-functions.r:
+- Updated functions:
+	- InformationValue(): fixed an error that occurred when categorical variables had more levels than found in the analyzed data. This may happen because the variable used to have certain values which they don't longer have. This was easily solved by keeping in the frequency table those entries that have frequency > 0.
+
+startup-functions.r:
+- Updated functions:
+	- whos():
+		- Now shows information to the user that the object sizes are reported in bytes.
+	- renamed midpoints() as extract() because we can extract not only the midpoints of the intervals.

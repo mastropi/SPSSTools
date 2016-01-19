@@ -1098,6 +1098,7 @@ get file='%(pctldata)s'
 /drop=Command_ Subtype_ Label_.
 dataset name @pctl.
 select if %(pctl_descvar)s = 'Weighted Average(Definition 1)'.
+execute.
 delete variables %(pctl_descvar)s.
 sort cases by var %(byvars)s.
 """ %locals())
