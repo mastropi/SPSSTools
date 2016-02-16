@@ -212,6 +212,9 @@ cat("\t", typeof(%(varR)s),"variable created in R.\n")
 #           2013/03/08
 #           - Fixed an error arising when passing parameter 'transforms' and occuring since the BuildVarListAndString() function has been
 #           changed to dedup names passed. The error was fixed by adding a new parameter 'dedup' to the function.
+#           2016/02/16
+#           - Changed the default value for the method parameter from "FD" to "density" as it was done in the R function DistributionsByGroup()
+#           called by this function.
 #
 # TODO:
 # 2013/08/29: Add a check whether the variables passed by the user exist in the dataset
@@ -226,7 +229,7 @@ def RDistributionsByGroup(
     valueLabels=(),                 # Blank-separated string of characters "." or "T" stating whether the original or transformed variable values should be used as labels for the horizontal axis (defaults to all ".")
     labelOrientation=None,          # Integer number (1, 2, 3, 4) defining the orientation of the text in the way that parameter 'las' in mtext() does.
     stats="q5 median q95",          # Blank-separate string indicating the statistics to show on the graph (e.g. mean, median, q25, etc.)
-    method="FD",                    # Method to use to determine the histogram bins. Possible values are: "density" and any other values accepted by the breaks parameter of hist().
+    method="density",               # Method to use to determine the histogram bins. Possible values are: "density" (which means that histogram breaks are chosen equally spaced on the VERTICAL axis so that there is more detail on the regions with larger counts) and any other values accepted by the breaks parameter of hist().
     alltogetherVars=True,           # Whether to show the distributions of all variables on a tiled plot
     alltogetherGroups=True,         # Whether to overlay the distributions of all groups on the same graph
     histFlag=False,                 # Whether to show the histogram as well (besides the density)

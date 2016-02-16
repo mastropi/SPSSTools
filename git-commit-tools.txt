@@ -336,3 +336,19 @@ startup-functions.r:
 	- whos():
 		- Now shows information to the user that the object sizes are reported in bytes.
 	- renamed midpoints() as extract() because we can extract not only the midpoints of the intervals.
+
+
+commit of Tools: 2016/01/20 - 2016/02/16 [COMMITTED]
+----------------------------------------
+Fixed bug in DistributionsByGroup() with the density() call
+
+datamining-functions.r:
+- Updated functions:
+	- DistributionsByGroup():
+		- The call to density() when there are less than 2 points fails because it cannot automatically determine the bandwidth.
+		- Changed the default value for the method parameter from "FD" to "density" because the former was sometimes causing problems on certain data.
+
+spssmacrosR.py
+- Updated functions:
+	- RDistributionsByGroup():
+		- Changed the default value for the method parameter from "FD" to "density" to be in line with the default parameter of R function DistributionsByGroup().

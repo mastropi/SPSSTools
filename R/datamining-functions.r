@@ -700,9 +700,15 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 # Description: Generates the distribution of continuous variables by a set of grouping variables
 # Application: Client profiles by predicted group of a scoring model (e.g. the VERY BEST vs. the VERY BAD)
 #
-# HISTORY: (2013/07/12)
-#          - Added parameter 'method' in order to estimate the histogram using a varying bin size which is determined
-#					 by equal-size groups of the density value (i.e. equal-size groups on the vertical axis!)
+# HISTORY:	(2013/07/12)
+# 					- Added parameter 'method' in order to estimate the histogram using a varying bin size which is determined
+#						by equal-size groups of the density value (i.e. equal-size groups on the vertical axis!)
+#
+#						(2016/02/16)
+#           - Fixed an error arising on a call to density() when the number of cases on a group is less than 2.
+#						So now I check that length(ind) > 2 for each analyzed group instead of checking just length(ind) > 0.
+#           - Changed the default value for the method parameter from "FD" to "density" because the former was
+#						sometimes causing problems on certain data.
 #
 # TODO:
 # -[DONE-2013/07/12] 2013/07/12: Show a histogram with varying breaks, defined by the slope of the estimated density.
@@ -758,7 +764,7 @@ Profiles <- DistributionsByGroup <- function(
   valueLabels=NULL,                 # Blank-separated string of characters "." or "T" stating whether the original or transformed variable values should be used as labels for the horizontal axis (defaults to all ".")
   labelOrientation=3,               # Integer number (1, 2, 3, 4) defining the orientation of the text in the way that parameter 'las' in mtext() does.
   stats="q5 median q95",            # Blank-separate string indicating the statistics to show on the graph (e.g. mean, median, q25, etc.)
-  method="FD",                      # Method to use to determine the histogram bins. Possible values are: "density" and any other values accepted by the breaks parameter of hist().
+  method="density",                 # Method to use to determine the histogram bins. Possible values are: "density" (which means that histogram breaks are chosen equally spaced on the VERTICAL axis so that there is more detail on the regions with larger counts) and any other values accepted by the breaks parameter of hist().
   alltogetherGroups=TRUE,           # Whether to overlay the distributions of all groups on the same graph
   histFlag=FALSE,                   # Whether to show the histogram as well (besides the density)
   cdfFlag=FALSE,                    # Whether to show the CDF instead of the PDF as density
@@ -1188,7 +1194,7 @@ print(hist$breaks)
 		# Value of the GROUP variable currently analyzed
 		gval = groupvalues[g]
 		ind = which(as.character(data[,gvar])==as.character(gval) & !is.na(data[,i]))
-		if (length(ind) > 0)
+		if (length(ind) > 2)	# DM-2016/02/16: Changed condition 'length(ind) > 0' to 'length(ind) > 2' because the density() function fails o.w. with message "need at least 2 points to select a bandwidth automatically" --still I only run it when we have at least 3 points)
 		{
 			x = data[ind,i]
 			if (xlimFlag & xadjustFlag)
