@@ -129,6 +129,32 @@ getAxisLimits = function(ext=0.04)
 	return(c(xlim, ylim))
 }
 
+# Return the lower and upper bound of intervals of the type (x1,x2] or [x1,x2), etc. and also the brackets
+# (Inspired by the midpoints() function published on Matt's Stats around May-2014, which I have implemented
+# as function extract())
+getBounds <- function(x)
+{
+	x = as.character(x)
+	left <- substr(x,1,1); 								opleft = ""; 	if (left == "(") { opleft = "<" } else if (left == "[") { opleft = "<=" }
+	right <- substr(x,nchar(x),nchar(x)); opright = ""; if (right == ")") { opright = "<" } else if (right == "]") { opright = "<=" }
+	lower <- as.numeric(gsub(",.*","",gsub("\\(|\\[|\\)|\\]","", x)))
+	upper <- as.numeric(gsub(".*,","",gsub("\\(|\\[|\\)|\\]","", x)))
+	return(list(lower=lower, upper=upper, left=left, right=right, opleft=opleft, opright=opright))
+}
+
+# Return the type of a variable in a data frame (character or numeric)
+getVarType = function(x)
+{
+	# Check if the variable is factor otherwise, typeof() returns numeric!! (since factor levels are converted or stored as numbers)
+	if (is.factor(x)) {
+		vartype = typeof(levels(x))
+	} else {
+		vartype = typeof(x)
+	}
+
+	return(vartype)
+}
+
 # Define the position of the x-axis in a pairs plot
 pairsXAxisPosition = function(xaxt="s")
 # Created: 2013/09/16

@@ -14,7 +14,38 @@ Author: Daniel Mastropietro"""
 #             I didn't do much, I just changed the condition "format.lower() == 'xls'" with "format.lower() <> 'sav'".
 # 2015/02/26: New GetVariableInfo() function,
 #             it returns selected attributes of an SPSS dataset (such as variable names, variable labels, etc.)
-#             
+#
+
+# TODO:
+# 2016/06/29: Create a function that copies variables from R to SPSS.
+#             Use the spssdictionary.SetDataFileAttributes(datasetName,attr1,...,attrN) function.
+#             Ref: response from Jon Peck on 29-Jul-2014, which goes:
+#             <<
+#               If you are asking about casewise variables, a dataset is appropriate, but for scalars or other non-casewise data, you can pass variables to Statistics using the spssdictionary.SetDataFileAttributes api.  These can be used by Statistics or read by Python code.  However, up through V22 these can only be set on a new dataset created from R, so you would have to create at least one variable with one case. 
+#               Sets datafile attributes. This function is used to define datafile attributes for new IBM SPSS Statistics datasets created with the
+#               SetDictionaryToSPSS function.
+#               - The argument datasetName is the name of the IBM SPSS Statistics dataset as specified on the call to the
+#               SetDictionaryToSPSS function used to create the dataset.
+#               - The arguments attr1,...,attrN specify the attributes and are of the form attrName=attrValue, where
+#               attrName is the name of the attribute and attrValue is either a single character value or a character
+#               vector, specifying a vector results in an attribute array.
+#               - The SetDataFileAttributes function should be called after SetDictionaryToSPSS and before calling EndDataStep.
+#             >>
+#
+#             Example taken from Personales_Daniel_Mastropietro/code/SPSS/psi.sps and slightly modified to copy a variable from R to SPSS:
+#             BEGIN PROGRAM R.
+#               ds$group = 8;
+#               # Create the dictionary for the variable to store in the dataset to create in SPSS (this is a data frame with one row per variable
+#               # containing the variables' metadata).
+#               groupSpec = c("group", "Base Group Allocation", 0, "F8.0", "ordinal")
+#               dict = data.frame(groupSpec)
+#               spssdictionary.SetDictionaryToSPSS("@CurrentGroup_", dict)
+#               spssdata.SetDataToSPSS("@CurrentGroup_", ds)
+#               spssdictionary.EndDataStep()
+#             END PROGRAM.
+#
+#             Note however that the answer by Jon Peck presents a method that could also be used to copy R variables to Python, not only to SPSS.
+#
 
 import spss
 import spssaux
