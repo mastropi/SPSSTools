@@ -352,3 +352,43 @@ spssmacrosR.py
 - Updated functions:
 	- RDistributionsByGroup():
 		- Changed the default value for the method parameter from "FD" to "density" to be in line with the default parameter of R function DistributionsByGroup().
+
+
+commit of Tools: 2016/02/17 - 2016/08/22 [COMMITTED]
+----------------------------------------
+New function GenerateCodeSPSS_WOEVariables()
+
+datamining-functions.r:
+- New functions:
+	- GenerateCodeSPSS_WOEVariables(): function created from the part of InformationValue() where the SPSS code for the WOE variables calculation is generated. The goal is to be able to call a function that reads a WOE table and generates the SPSS code.
+	When doing this, I changed the structure on which the SPSS code is returned, from a data frame to a vector, since it is more easily handled.
+
+- Updated functions:
+	- InformationValue():
+		- now calls the new function GenerateCodeSPSS_WOEVariables() to generate the SPSS code.
+		- there is a new column in the IV and WOE outputs called "vartype", which indicates whether the variable is "character" or "numeric", which is important when generating the code for categorical variables since we need to know whether to enclose the value against which they are compared in quotes or not.
+
+startup-functions.r
+- New functions:
+	- getBounds(), getVarType(): functions taken from InformationValue() in datamining-functions.r and moved here since they are general-purpose functions.
+
+
+commit of Tools: 2016/02/23 - 2016/11/30
+----------------------------------------
+New parseVariables() function; fixed bug in extractVariable(); updated roc()
+
+datamining-functions.r
+- General: all functions calling unlist(strsplit(..., "[ \n]")) now call the newly created function parseVariables().
+- Updated functions:
+	- GenerateCodeSPSS_WOEVariables(): added a new line in the generated where the WOE variable that is computed is set to missing before computing it, so that if the WOE variable already exists in the dataset, its value is set to missing when the original variable is missing (and is not left at a previously computed value, which may be wrong).
+
+	- roc():
+		- Added new parameter weight= which allows computation of the ROC for a given weight variable (e.g. a KPI of interest).
+		- Improved the names of the variables in the output dataset to better reflect the measures stored in the output data (e.g. Spec, Sens, etc.). Note that these values are computed cumulatively both from the bottom percentile to the top percentile and viceversa, so that it's easy to generate different analyses.
+
+startup-functions.r
+- Renamed functions:
+	- parseVariable() --> extractVariable() to avoid confusion with the newly created parseVariables() function which does the unlist(strsplit()) process.
+- Updated functions:
+	- extractVariable(): changed the way I check whether the 'var' parameter has been passed as a string or as a variable name from is.character(var) to deparse(substitute(var)) and a further check with grep(). In fact is.character() does not work because it returns TRUE when the specified column is a character column in a data frame.
+

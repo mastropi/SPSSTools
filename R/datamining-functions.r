@@ -83,7 +83,7 @@ GenerateCodeSPSS_WOEVariables = function(
 	SPSS = vector(mode="character", length=nrows)
 
 	# Start the iteration on the WOE information
-	bin = 1			# Counter of the bins or groups within each variable
+	bin = 0			# Counter of the current bin or group analyzed of each variable
 	ii = 1			# output index (used for matrix SPSS)
 	imax = nrow(WOETable)
 
@@ -105,8 +105,18 @@ GenerateCodeSPSS_WOEVariables = function(
 		group = WOETable$group[i]																	# Group or bin that is currently analyzed
 		nextgroup = ""; if (i < imax) { nextgroup = WOETable$group[i+1] }
 		# 1.- Check if this is an actual group
-		if (is.na(group)) {	# NA indicates that a new variable starts (since it is used as separator among variables in the WOE table)
-			bin = 1		# This value of 'bin' is only used in the next iteration...
+		if (i == 1 || is.na(group)) {	# If it's the first bin of the variable or if the current group is NA which indicates that a new variable starts in the next loop (since NA is used as separator among variables in the WOE table)
+			bin = 0		# Reset the bin value to 0, so that we start over again analyzing a new variable
+			# Start-off with the WOE variable set to missing in case the WOE variable already exists...
+			# This is so that, if the WOE variable already exists in the dataset, its value is set to missing
+			# when the original variable is missing (and is not left at a previously computed value, which may be wrong).
+			# Note that the original value at which the WOE variable is set will remain set to that value
+			# when the original variable is missing because in general a missing value in the original variable
+			# will not fall in any of the bins defining the WOE variable (because 'missing' compared to any value
+			# is missing), unless of course one of the bins is the missing value itself! (which is expected to be
+			# marked as "NaN" in the WOE table).
+			expr = paste("compute", newvname, "= $SYSMIS.")
+			if (i == 1) i = i - 1		# Decrease the LOOP variable because we still need to process the first bin of the variable
 		} else {
 			# 2.- Check if this group is a Missing value in the original variable
 			if (group == "NaN") {
@@ -172,13 +182,13 @@ GenerateCodeSPSS_WOEVariables = function(
 					} # (5)
 				} # (3)
 			} # (2)
-			# Store the SPSS expression
-			SPSS[ii] = expr
-			# Go to the next group or bin
-			bin = bin + 1
-			# Increase the output index (used for matrix SPSS)
-			ii = ii + 1
 		} # (1)
+		# Store the SPSS expression
+		SPSS[ii] = expr
+		# Increase the output index (used for matrix SPSS)
+		ii = ii + 1
+		# Go to the next group or bin
+		bin = bin + 1
 	}
 
 	return(SPSS)
@@ -786,8 +796,8 @@ AssignCategories = function(dat, vars, newvars, newvalues, groupedCat)
 #									tofit = AssignCategories(tofit, "x z", "x_cat z_cat", newvalues, vars.gc)
 {
 	# Check if the variables passed were passed as arrays (length>1) or strings (length=1)
-	if (length(vars) == 1) { vars = unlist(strsplit(vars,"[ \n]")) }
-	if (length(newvars) == 1) { newvars = unlist(strsplit(newvars,"[ \n]")) }
+	if (length(vars) == 1) { vars = parseVariables(vars) }
+	if (length(newvars) == 1) { newvars = parseVariables(newvars) }
 	
 	i = 0
 	for (v in vars) {
@@ -884,6 +894,7 @@ Profiles <- DistributionsByGroup <- function(
   data,                             # Name of the data matrix or data frame with the variables to analyze
   vars,                             # Blank-separated string with the names of the continuous variables to analyze
   groupvars=NULL,                   # Blank-separated string with the names of the group variables defining the populations for which distributions are created.
+																		# NOTE: FOR NOW ONLY ONE GROUP VARIABLE IS ALLOWED!
   transforms=NULL,                  # Blank-separated string of function names to use to transform the variables in vars before computing their distribution (accepted values are: "log", "safeLog", "." (for no transformation))
   valueLabels=NULL,                 # Blank-separated string of characters "." or "T" stating whether the original or transformed variable values should be used as labels for the horizontal axis (defaults to all ".")
   labelOrientation=3,               # Integer number (1, 2, 3, 4) defining the orientation of the text in the way that parameter 'las' in mtext() does.
@@ -1026,11 +1037,11 @@ VALIDVALUELABELS = c(".", "T")
 #------------------------------ Parse Input parameters ------------------------------#
 ### Convert strings passed in parameters to arrays so that the user can pass these arguments as a string
 # VARS
-vars = unlist(strsplit(vars,"[ \n]"))   # [ \n] is a regular expression that indicates to use either the space or the new line character (\n) as a splitting character.
+vars = parseVariables(vars)
 nvars = length(vars)
 # GROUPVARS
 if (!is.null(groupvars)) {
-  groupvars = unlist(strsplit(groupvars, "[ \n]"))
+  groupvars = parseVariables(groupvars)
 } else {
   # No grouping variable => Plot only one distribution for a fictitious group which is the same for all observations
   groupvars = "SINGLEGROUP_"
@@ -1041,7 +1052,7 @@ ngroupvars = length(groupvars)
 # TRANSFORMS
 if (!is.null(transforms)) {
   # Convert 'transforms' to a vector and capitalize all letters
-  transforms = unlist(strsplit(toupper(transforms),"[ \n]"))
+  transforms = parseVariables(toupper(transforms))
   ntransforms = length(transforms)
   if (ntransforms != nvars) {
     # Note that the stop() function automatically displays an error message before the message I write here.
@@ -1061,7 +1072,7 @@ if (!is.null(transforms)) {
 # VALUELABELS
 if (!is.null(valueLabels)) {
   # Convert 'valueLabels' to a vector and capitalize all letters
-  valueLabels = unlist(strsplit(toupper(valueLabels),"[ \n]"))
+  valueLabels = parseVariables(toupper(valueLabels))
   nvalueLabels = length(valueLabels)
   if (nvalueLabels != nvars) {
     stop("ERROR: the number of label values given in parameter 'valueLabels' (", valueLabels, ") is different from the number of variables passed in 'vars' (", nvars, ")")
@@ -1080,7 +1091,7 @@ if (!is.null(valueLabels)) {
 # STATS
 nstats = 0
 if (!is.null(stats) && stats != "") {
-  stats = unlist(strsplit(stats, "[ \n]"))
+  stats = parseVariables(stats)
   nstats = length(stats)
   statFuns = stats
   statValues = rep(0,nstats) # Set a non-NA value to statValues[s] as default value. 
@@ -1111,7 +1122,7 @@ if (is.null(xlim)) {
 } else {
 	xlimFlag = TRUE
 	# Convert the string to a vector of numbers
-#	xlim = as.double(unlist(strsplit(xlim, " ")))
+#	xlim = as.double(parseVariables(xlim))
 }
 #------------------------------ Parse Input parameters ------------------------------#
 
@@ -1224,7 +1235,7 @@ if (is.null(colors) || max(toupper(colors) == "_AUTO_")) {      # Use the max() 
 		colors = rainbow(ngroupvalues)
 	} else {
 		# Convert the string given by the user into a vector of color names
-		colors = unlist(strsplit(tolower(colors), "[ \n]"))
+		colors = parseVariables(tolower(colors))
 		indmatch = match(colors, colornames)                # The order of the 2 vectors being compared is important, as I want the indices of vector colornames where the values given in vector colors are found.
 		indmatch = indmatch[!is.na(indmatch)]
 		# Only set the colors to the color palette if ALL colors given by the user are found in the list
@@ -1845,9 +1856,9 @@ InformationValue = function(
 
   ### VARS, VARCLASS, VARNUM
   # NOTE that unlist(strstplit()) also works when the argument is already a vector!!! GREAT!!
-  if (!is.null(vars)) { vars = unlist(strsplit(vars,"[ \n]")) }
-  if (!is.null(varclass)) { varclass = unlist(strsplit(varclass,"[ \n]")) }
-  if (!is.null(varnum)) { varnum = unlist(strsplit(varnum,"[ \n]")) }
+  if (!is.null(vars)) { vars = parseVariables(vars) }
+  if (!is.null(varclass)) { varclass = parseVariables(varclass) }
+  if (!is.null(varnum)) { varnum = parseVariables(varnum) }
   # Construct all the continuous variables to analyze
   varnum = unique(c(vars, varnum))
   # Check the existence of the variables in the dataset 'data'
@@ -2389,7 +2400,7 @@ ModelFit <- model.fit <- function(dat, target="y", score="p", vars="p", groups=2
 
 	# If vars is passed as a string convert it to an array of variable names
 	if (is.character(vars) & length(vars) == 1) {
-		vars = unlist(strsplit(vars, "[ \n]"))
+		vars = parseVariables(vars)
 	}
 	i = 0
 	for (v in vars) {
@@ -2526,66 +2537,150 @@ PrecisionRecall <- F1 <- function(
 # - renamed 'cant.bines' to 'groups'
 # - added parameter 'lwd' for the line width of the ROC line
 # - added report of AR (Accuracy Ratio) or Gini Index along with the AUC.
-roc <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.type = 1, round.AUC = 2, lwd=1, col=NULL,
-		 												   label=NULL, xlab="Proporcion de buenos identificados", ylab="Proporcion de malos identificados", title="Curva ROC", cex=0.8, cex.main=1)
-  # Genera una curva roc a partir de un df con una columna de clase binaria y otra de probabilidades
-  # Hace un rank de las probabilidades y construye una roc en base al mismo
+# 2016/11/13
+# - New '...' parameter of optional parameters received by model.frame()
+# - A weights variable is allowed which can be used to weight each case when computing the ROC.
+# Ex: if we want to analyze the benefits of the model in terms of money earned and lost.
+# Resuls make more sense when weights are non-negative.
+# This weights information should be given as a variable name present in the data frame.
+# In addition, it should be given in the formula (e.g. y ~ p + wght and then set weights="wght")
+# - Considers the case groups=NULL that performs no grouping
+# - NA treatment (e.g. see rank() call where NA is ranked with rank = NA)
+# - Replaced the use of tapply() with aggregate() that computes min(pm) and max(pm) at the same time
+# for more efficiency and for more handy output (already a data.frame with two columns min and max,
+# instead of a list, which has to be unlisted before merging into tbl.df)
+roc <- function(formula, data, weights=NULL,
+								pos=1, groups=20, print=FALSE, plot=TRUE, quantile.type=1, round.AUC=2, lwd=1, col=NULL,
+		 						label=NULL, xlab="Proporcion de buenos identificados", ylab="Proporcion de malos identificados", title="Curva ROC", cex=0.8, cex.main=1,
+								...)
+  # Genera una curva roc a partir de un df con una columna de clase binaria (must be 0/1) y otra de probabilidades
+  # Hace un rank de las probabilidades y construye una roc en base a dicho rank.
   
   # Mediante el parametro pos, se pueden ir superponiendo hasta 4 curvas roc
   # Ejemplo de uso:
   #   roc(clase ~ prob, mod1)
   #   roc(clase ~ prob, mod2, pos = 2)
   #   roc(clase ~ prob, mod2, pos = 3)
-  # donde mod1, mod2 y mod3 son dfs con las variables 'clase' (valor observado del target) y 'prob' (probabilidad predicha de clase 1)
+	#   roc(clase ~ prob, mod2, pos = 3, weights=w)
+	# donde mod1, mod2 y mod3 son dfs con las variables 'clase' (valor observado del target) y 'prob' (probabilidad predicha de clase 1)
+	# w es el nombre de una columna en el dataset mod2 con los pesos a usar en el calculo de la ROC.
 {
-  df <- model.frame(formula, data)
-  colnames(df) <- c('clase', 'pm')
+	if (is.null(weights)) {
+  	df <- model.frame(formula, data, ...)
+		colnames(df) <- c('clase', 'pm')
+	} else {
+		df <- model.frame(formula, data, ...)
+		colnames(df) <- c('clase', 'pm', 'weights')
+	}
   df$clase <- factor(df$clase)
-  
-  descrip.clase <- unique(df$clase)
+
   # Rank de la prob. de 'malo'
   #   df$grupo <- findInterval(df$pm, 
   #                            quantile(df$pm, seq(0, 1, len = groups - 1), type = quantile.type),
   #                            all.inside = TRUE, rightmost.closed = TRUE)
-  ranking <- rank(df$pm,  ties.method = "average")
-  df$grupo <- findInterval(ranking, 
-    quantile(ranking, seq(0, 1, len = groups), type = quantile.type),
-    all.inside = TRUE, rightmost.closed = TRUE)
-  
-  tbl <- as.matrix(table(df$grupo, df$clase), ncol=3)
-  
-  tbl.df <- as.data.frame(cbind(tbl[, 1], tbl[, 2]))
-  colnames(tbl.df) <- dimnames(tbl)[[2]]
-  
-  min.prob <- tapply(df$pm, df$grupo, min, simplify = TRUE)
-  tbl.df <- cbind(tbl.df, min.prob[match(dimnames(min.prob)[[1]], rownames(tbl.df))])
-  colnames(tbl.df)[length(colnames(tbl.df))] <- 'min.prob'
-  
-  max.prob <- tapply(df$pm, df$grupo, max, simplify = TRUE)
-  MAX.max.prob <- max(max.prob)
-  tbl.df <- cbind(tbl.df, max.prob[match(dimnames(max.prob)[[1]], rownames(tbl.df))])
-  colnames(tbl.df)[length(colnames(tbl.df))] <- 'max.prob'
-  
-  tbl.df[order(-as.numeric(rownames(tbl.df))), 'N.acum'] <-
-    cumsum(tbl.df[order(-as.numeric(rownames(tbl.df))), 1])
-  tbl.df[order(-as.numeric(rownames(tbl.df))), 'S.acum'] <-
-    cumsum(tbl.df[order(-as.numeric(rownames(tbl.df))), 2])
-  
-  tbl.df$N.acum2 <- tbl.df$N.acum / sum(tbl.df[[1]])
-  tbl.df$S.acum2 <- tbl.df$S.acum / sum(tbl.df[[2]])
-  
-  # Agrego una ?ltima fila para generar el punto (0, 0)
+  ranking <- rank(df$pm,  ties.method="min", na.last="keep")
+		## ties.method="min" => this is the method used in sports and here we use it in order to have ALWAYS integer
+		## rank values (regardless of the number of ties found), which is not the case when using ties.method = "average"
+		## in which case we can have decimal ranks such as 2.5 (however, note that the decimal rank is either .0 or .5
+		## but decimals like .3333333... cannot happen). But just in case, I still use ties.method="min" to assure
+		## integer ranks.
+		## na.last = "keep" => NAs are given rank = NA
+	if (is.null(groups)) {
+		df$grupo <- ranking
+	} else {
+		df$grupo <- findInterval(	ranking, 
+															quantile(ranking, seq(0, 1, len = groups), type=quantile.type),
+															all.inside=TRUE, rightmost.closed=TRUE)
+	}
+
+	# Crosstab of grupo and clase
+  tbl <- as.matrix(table(df$grupo, df$clase))
+  tbl.df <- as.data.frame(cbind(tbl[,1], tbl[,2]))
+  clase.values <- dimnames(tbl)[[2]]
+	colnames(tbl.df) <- clase.values
+		## Note that the rownames of tbl.df are the non-missing values of df$grupo
+		## => we can simply merge the result of (min(pm), max(pm)) computed by aggregate() below
+		## into the input tbl.df table by using the values of grupo in the output of aggregate()
+		## as ENTRY INDICES on the tbl.df data frame.
+
+	# Total counts for each clase
+	totals.n <- apply(tbl.df, 2, FUN=sum)
+
+	# Min and max pm for each grupo
+	probs.grupo <- aggregate(pm ~ grupo, data=df, FUN=function(x) { c(min(x), max(x)) })
+	probs.grupo$grupo <- as.character(probs.grupo$grupo)	# Convert the NUMERIC grupo values to character so that we can use them directly to access rows in the tbl.df data frame (I thought factor() also would work, but it seems it doesn't) 
+	tbl.df <- cbind(tbl.df[probs.grupo$grupo,], probs.grupo[, 2])
+		## Note that we cbind() just column 2 of 'probs' because the min and max pm are stored together as a matrix
+		## having column names "pm.1" and "pm.2", which however cannot be referenced separately.
+	colnames(tbl.df) <- c(clase.values, "min.prob", "max.prob")
+
+	# Add a first row with all 0s to facilitate calculations of cumulative and inverse cumulative values below
+	first.row <- as.data.frame( matrix(nrow=1, ncol=4, data=c(0,0,NA,NA)) )
+	colnames(first.row) <- colnames(tbl.df)
+	rownames(first.row) <- "0"					# The first row is assigned group "0", since the first actual group has id "1"
+	tbl.df <- rbind(first.row, tbl.df)
+	
+	# Compute the cumulative values based on the order given by grupo (which is how tbl.df is sorted (already)
+	cum_events <- cumsum(tbl.df[, 1:2])
+  tbl.df[, c("Goods.acum", "Bads.acum", "Goods.acuminv", "Bads.acuminv")] <- cbind(cum_events, sapply(totals.n, rep, nrow(tbl.df)) - cum_events)
+	# Compute the following quantities:
+	# 1-Specificity = (#Goods incorrectly captured) / (Total Goods) 	--> starts at 0 and ends at 1
+	# Sensitivity = (#Bads correctly captured) / (Total Bads)					--> starts at 0 and ends at 1
+	# Specificity = (#Goods correctly captured) / (Total Goods) 			--> starts at 1 and ends at 0
+	# 1 - Sensitivity = (#Bads incorrectly captured) / (Total Bads)		--> starts at 1 and ends at 0
+	totals.n.mat <- sapply(c(totals.n, totals.n), rep, nrow(tbl.df))
+	tbl.df[, c("SpecInv", "Sens", "Spec", "SensInv")] <- 
+			tbl.df[, c("Goods.acum", "Bads.acum", "Goods.acuminv", "Bads.acuminv")] / totals.n.mat
+
+	if (!is.null(weights)) {
+		# Total weights by clase on NON-MISSING values of grupo
+		totals.weights <- as.vector( t( aggregate(weights ~ clase, data=df, subset=!is.na(df$grupo), FUN=sum)[,-1] ) )
+		## Note: no need to use na.rm=TRUE when computing the aggregate (they are automatically removed from the computations)
+		names(totals.weights) <- clase.values
+		
+		weights.grupo <- aggregate(weights ~ clase + grupo, data=df, FUN=sum)
+		# Transpose to get one column per target variable value
+		weights.grupo <- reshape(weights.grupo, direction="wide", idvar="grupo", timevar="clase")
+		weights.grupo$grupo <- as.character(weights.grupo$grupo)	# Convert the NUMERIC grupo values to character so that we can use them directly to access rows in the tbl.df data frame (I thought factor() also would work, but it seems it doesn't) 
+		# Fix the column names.
+		# NOTE that the columns are NOT sorted by the timevar variable but they are sorted
+		# according to which one is encountered first during the dataset transpose!!! GRRRRR!!
+		# IN ADDITION, the variable names are NOT simply the values taken by the timevar variable,
+		# but the prefix '<var>.' is added!!! where <var> is the analyzed variable (e.g. weights.1, weights.0) GRRRRR 2!!!! 
+		nam <- colnames(weights.grupo)[-1]
+		colnames(weights.grupo) <- c("grupo", sub("weights.", "", nam))
+
+		# Construct the cumulative weights
+		# First replace missing values in weights.grupo with 0
+		# Note that is.na() on a matrix returns a logical matrix which makes life easier!! (GREAT!)
+		weights.grupo[is.na(weights.grupo)] <- 0
+		# NOTE: The first value of the two .acum variables and the last value of the two .acuminv variables should always be 0.
+		tbl.df[, c("WeightedGoods.acum", "WeightedBads.acum", "WeightedGoods.acuminv", "WeightedBads.acuminv")] <- 0
+		tbl.df[weights.grupo$grupo, c("WeightedGoods.acum", "WeightedBads.acum")] <- weights.grupo[, clase.values]
+		tbl.df[, c("WeightedGoods.acum", "WeightedBads.acum")] <- cumsum( tbl.df[, c("WeightedGoods.acum", "WeightedBads.acum")] )		# Amazingly enough this cumulatively sums each of the selected columns!!
+		tbl.df[, c("WeightedGoods.acuminv", "WeightedBads.acuminv")] <- sapply(totals.weights, rep, nrow(tbl.df)) - tbl.df[, c("WeightedGoods.acum", "WeightedBads.acum")]
+		totals.weights.mat <- sapply( c(totals.weights, totals.weights), rep, nrow(tbl.df) )		
+		tbl.df[, c("WeightedSpecInv", "WeightedSens", "WeightedSpec", "WeightedSensInv")] <-
+				tbl.df[, c("WeightedGoods.acum", "WeightedBads.acum", "WeightedGoods.acuminv", "WeightedBads.acuminv")] / totals.weights.mat 
+		# Compute the following quantities:
+		# 1-Specificity = (Goods weight incorrectly captured) / (Total Goods Weight)	--> starts at 0 and ends at 1
+		# Sensitivity = (Bads weight correctly captured) / (Total Bads Weight)				--> starts at 0 and ends at 1
+		# 1-Specificity = (Goods weight incorrectly captured) / (Total Goods Weight) 	--> starts at 1 and ends at 0
+		# Sensitivity = (Bads weight correctly captured) / (Total Bads Weight)				--> starts at 1 and ends at 0
+	}
+	
+	# Agrego una ultima fila para generar el punto (0, 0)
   ## Lo hago en dos pasos porque me falla el rbind si los nombres de columnas no son iguales...
-  ult.fila <- data.frame(0, 0, 
-    min.prob = MAX.max.prob, max.prob = 1,
-    N.acum = 0, S.acum = 0, N.acum2 = 0, S.acum2 = 0,
-    row.names = as.vector(as.character(groups)))
-  colnames(ult.fila) <- colnames(tbl.df)
-  tbl.df <- rbind(tbl.df, ult.fila)
+#  ult.fila <- data.frame(0, 0, 
+#    min.prob = MAX.max.prob, max.prob = 1,
+#    Goods.acum = 0, Bads.acum = 0, Goods.acum2 = 0, Bads.acum2 = 0,
+#    row.names = as.vector(as.character(groups)))
+#  colnames(ult.fila) <- colnames(tbl.df)
+#  tbl.df <- rbind(tbl.df, ult.fila)
   
-  # Area Under the Curve
-  AUC = -sum((((2 * tbl.df$S.acum2[-1]) - diff(tbl.df$S.acum2)) /2) * diff(tbl.df$N.acum2))
-  # Accuracy Ratio or Gini Index = (2*AUC - 1).
+  # Area Under the Curve (formula is ok = b*delta/2 - (b-a)*delta/2 which is easier to implement than (a+b)*delta/2 because (b-a) can be simply computed as diff(Sens)
+  AUC = sum((((2 * tbl.df$Sens[-1]) - diff(tbl.df$Sens)) /2) * diff(tbl.df$SpecInv))
+	# Accuracy Ratio or Gini Index = (2*AUC - 1).
   # Note that the AUC is already independent of event rate and that is why the event rate is not needed to compute the AR or Gini index.
   # The Gini index is the ratio of the ABSS and 0.5, where:
   # ABSS = Area Between the...
@@ -2594,30 +2689,63 @@ roc <- function(formula, data, pos = 1, groups = 20, print=FALSE, quantile.type 
   # and 0.5 = the maximum possible ABSS area (i.e. the area between the OPTIMUM Sensitivity and (1-Specificity) curves).
   # For more info, see my notes on the Nemo notebook started at Meridian in Mexico.
   AR = 2*AUC - 1
-  if (is.null(col)) {
+	if (!is.null(weights)) {
+		AUC.weighted = sum((((2 * tbl.df$WeightedSens[-1]) - diff(tbl.df$WeightedSens)) /2) * diff(tbl.df$WeightedSpecInv))
+		AR.weighted = 2*AUC.weighted - 1
+	}
+
+	if (is.null(col)) {
   	color = switch(pos, 'blue', 'green', 'red', 'black', 'purple', 'yellow')
   } else {
     color = col
   }
-  
-  if (pos == 1) {
-    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'o', pch=21, col=color, bg=color,
-      xlim = c(0, 1), ylim = c(0, 1),
-      xlab = xlab, ylab = ylab,
-      main = title, cex.main=cex.main, lwd=lwd)
-    lines(c(0, 1), c(0, 1), col = 'red', lty = 3)
-  } else{
-    par(new=TRUE)
-    plot(tbl.df$N.acum2, tbl.df$S.acum2, type = 'o', pch=21, col=color, bg=color, 
-      xlim = c(0, 1), ylim = c(0, 1), lwd=lwd,
-      ann = FALSE, axes = FALSE)
-  }
-  if (is.null(label)) label = deparse(substitute(data))
-
-  text(0.6, cex * pos / 7, paste(label, ':\nAUC=', formatC(AUC, format='g', round.AUC), ', AR/Gini=', formatC(AR, format='g', round.AUC), sep=""), cex = cex, col = color)
+	if (is.null(label)) label = deparse(substitute(data))
+	
+  if (plot) {
+		if (pos == 1) {
+			if (!is.null(weights)) {
+				op = par(mfrow=c(1,2), no.readonly=TRUE);
+			}
+	    plot(tbl.df$SpecInv, tbl.df$Sens, type = 'o', pch=21, col=color, bg=color,
+	      xlim = c(0, 1), ylim = c(0, 1),
+	      xlab = xlab, ylab = ylab,
+	      main = title, cex.main=cex.main, lwd=lwd)
+	    lines(c(0, 1), c(0, 1), col = 'red', lty = 3)
+			text(0.6, cex * pos / 7, paste(label, ':\nAUC=', formatC(AUC, format='g', round.AUC), ', AR/Gini=', formatC(AR, format='g', round.AUC), sep=""), cex = cex, col = color)
+			if (!is.null(weights)) {
+				plot(tbl.df$WeightedSpecInv, tbl.df$WeightedSens, type = 'o', pch=21, col=color, bg=color,
+						xlim = c(0, 1), ylim = c(0, 1),
+						xlab = xlab, ylab = ylab,
+						main = paste("Weighted", title), cex.main=cex.main, lwd=lwd)
+				lines(c(0, 1), c(0, 1), col = 'red', lty = 3)
+				text(0.6, cex * pos / 7, paste(label, ':\nWeighted AUC=', formatC(AUC.weighted, format='g', round.AUC), ', AR/Gini=', formatC(AR.weighted, format='g', round.AUC), sep=""), cex = cex, col = color)
+				par(op)
+			}
+		} else {
+			if (!is.null(weights)) {
+				par(mfg=c(1,1));
+			}
+	    par(new=TRUE)
+	    plot(tbl.df$SpecInv, tbl.df$Sens, type = 'o', pch=21, col=color, bg=color, 
+	      xlim = c(0, 1), ylim = c(0, 1), lwd=lwd,
+	      ann = FALSE, axes = FALSE)
+			text(0.6, cex * pos / 7, paste(label, ':\nAUC=', formatC(AUC, format='g', round.AUC), ', AR/Gini=', formatC(AR, format='g', round.AUC), sep=""), cex = cex, col = color)
+			if (!is.null(weights)) {
+				par(mfg=c(1,2))
+				plot(tbl.df$WeightedSpecInv, tbl.df$WeightedSens, type = 'o', pch=21, col=color, bg=color,
+						xlim = c(0, 1), ylim = c(0, 1), lwd=lwd,
+						ann = FALSE, axes = FALSE)
+				text(0.6, cex * pos / 7, paste(label, ':\nWeighted AUC=', formatC(AUC.weighted, format='g', round.AUC), ', AR/Gini=', formatC(AR.weighted, format='g', round.AUC), sep=""), cex = cex, col = color)
+			}
+		}
+	}
 
 	if (print) print(tbl.df)
 
-  return(invisible(list(data=tbl.df, AUC=AUC, AR=AR)))
+	if (is.null(weights)) {
+		return(invisible(list(data=tbl.df, AUC=AUC, AR=AR)))
+	} else {
+		return(invisible(list(data=tbl.df, AUC=AUC, AR=AR, AUC.weighted=AUC.weighted, AR.weighted=AR.weighted)))
+	}
 }
 ############################################## roc ############################################

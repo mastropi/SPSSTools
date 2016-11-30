@@ -1,6 +1,6 @@
 # startup-functions.r
 # Created:      July 2008
-# Modified:     31-Jan-2015
+# Modified:     30-Nov-2016
 # Author:       Daniel Mastropietro
 # Description: 	Startup settings to be invoked when R starts
 # R version:    R-2.8.0 (used in SPSS 18.0.0 @NAT starting 2013)
@@ -37,6 +37,11 @@
 # - 2014/07/22: Created functions:
 #								- panel.image(): same as function plot.image() but with add=TRUE always.
 #								- Replaced all calls to plot.image() with panel.image() (e.g. pairs.custom() now defaults to lower.panel=panel.image)
+# - 2016/11/30: Created function:
+#								- parseVariables(): calls unlist(strsplit(vars, "[ \n]+"))
+#								Renamed function:
+#								- parseVariable() -> extractVariable() (in order to avoid confusion with the newly created parseVariables() since extractVariable()
+#								extracts a variable from a data frame.
 #
 
 # TODO:
@@ -82,7 +87,8 @@ panel.smooth <- function(x, y, group, ...)
 # pairsXAxisPosition
 # pairsYAxisPosition
 # checkVariables
-# parseVariable
+# extractVariable
+# parseVariables
 # extract
 # who
 # whos
@@ -255,24 +261,40 @@ CheckVariables <- checkVariables <- check.variables <- function(data, vars, prin
 }
 
 # Parse a variable passed to a function so that either the actual variable or a string representing a data frame's variable name are accepted
-parseVariable <- parse.variable <- function(dat, var)
+extractVariable <- extract.variable <- function(dat, var)
 # Created: 			30-Mar-2014
 # Modified: 		30-Mar-2014
 # Author: 			Daniel Mastropietro
 # Description: 	Parses variables passed to functions so that variable names are converted to the actual variable in the data frame.
 # Parameters:
-#             	data: matrix or data frame that should contain variable 'var'
-#             	var: single variable received by the function for which this parsing is taking place
+#             	data: matrix or data frame that should contain variable 'var'.
+#             	var: string (as in "x") or variable name (as in dat$x) that should be parsed.
 # Output: 			Either an error that the variable does not exist or the actual variable taken from data frame 'dat'
-# Examples:			target = "y"; target = parseVariable(toplot, target);
-#								target = dat$y; target = parseVariable(toplot, target);
+# Examples:			target = "y"; target = extractVariable(toplot, target);
+#								target = dat$y; target = extractVariable(toplot, target);
 {
-	if (is.character(var) & length(var) == 1) {
-		if (!is.null(checkVariables(dat, var))) stop("The variables indicated above were not found in dataset '", deparse(substitute(dat)), "'")
+	# Check if 'var' has been passed as a string (as in "x") or as a variable name (as in dat$x)
+	# NOTE that we don't use is.character(var) to accomplish this task because is.character(dat$x) returns TRUE when the x column
+	# in dat is of type character!
+	var_name = deparse(substitute(var))    	# this returns "\"x\"" when var = "x" and "x" if var = x (the variable x)
+  if (length(grep("\"", var_name)) > 0) {	# this is TRUE when var is already a string
+		var_name = var
+		if (!is.null(checkVariables(dat, var))) {
+			cat("The variables indicated above were not found in dataset '", deparse(substitute(dat)), "'\n", sep="")
+			return(NULL)
+		}
 		var = dat[,var] 
 	}
 
 	return(var)
+}
+
+# Convert a list of variables which can be given as a blank/tab/line separated list or as an array into an array
+parseVariables <- function(vars) {
+# Created: 			30-Nov-2016
+# Modified: 		30-Nov-2016
+# Author: 			Daniel Mastropietro
+	return(unlist(strsplit(vars, "[ \n]+")))	# Note: the white space matches one or more blanks or one or more tabs (see ?regex)
 }
 
 # Extract the mid point, lower value or upper value of open, closed, semi-open intervals like those returned by the cut() function.
