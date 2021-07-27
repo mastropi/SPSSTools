@@ -101,10 +101,11 @@ __all__ = [ "RSource",
 def RSource(dir=Rdir_):
     """Create the syntax that 'source's the R codes in the specified directory"""
 
-    # Note the use of .r$ as pattern so that only files ENDING in .r are returned (additional note: the '*' is NOT allowed in the pattern in version R-2.8.0, although it is allowed in version R-3.0.1)
+    # Note the use of .r$ as pattern so that only files ENDING in .r or .R are returned
+    # (additional note: the '*' is NOT allowed in the pattern in version R-2.8.0, although it is allowed in version R-3.0.1)
     syntaxR = r"""
 BEGIN PROGRAM R.
-files = list.files(path="%(dir)s", pattern=".r$")
+files = list.files(path="%(dir)s", pattern=".r$", ignore.case=TRUE)
 for (f in files) { cat("Compiling R code present in %(dir)s...", f, "\n"); source(file.path("%(dir)s",f)) }
 END PROGRAM.""" %locals()
     spss.Submit(syntaxR)
