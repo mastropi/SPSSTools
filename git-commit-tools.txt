@@ -377,18 +377,26 @@ commit of Tools: 2016/02/23 - 2016/11/30
 ----------------------------------------
 New parseVariables() function; fixed bug in extractVariable(); updated roc()
 
-datamining-functions.r
+datamining-functions.r:
 - General: all functions calling unlist(strsplit(..., "[ \n]")) now call the newly created function parseVariables().
 - Updated functions:
 	- GenerateCodeSPSS_WOEVariables(): added a new line in the generated where the WOE variable that is computed is set to missing before computing it, so that if the WOE variable already exists in the dataset, its value is set to missing when the original variable is missing (and is not left at a previously computed value, which may be wrong).
 
 	- roc():
 		- Added new parameter weight= which allows computation of the ROC for a given weight variable (e.g. a KPI of interest).
+		This implied a major change in the code! Note that this weights approach:
+			- takes into account the no-grouping case when groups=NULL
+			- NAs are allowed in the data --the rank() function call ranks NA value with rank = NA
+		- Replaced the use of tapply() with aggregate() that computes min(pm) and max(pm) at the same time for more efficiency and for more handy output (already a data.frame with two columns min and max, instead of a list, which has to be unlisted before merging into tbl.df)
 		- Improved the names of the variables in the output dataset to better reflect the measures stored in the output data (e.g. Spec, Sens, etc.). Note that these values are computed cumulatively both from the bottom percentile to the top percentile and viceversa, so that it's easy to generate different analyses.
 
-startup-functions.r
+startup-functions.r:
 - Renamed functions:
 	- parseVariable() --> extractVariable() to avoid confusion with the newly created parseVariables() function which does the unlist(strsplit()) process.
 - Updated functions:
 	- extractVariable(): changed the way I check whether the 'var' parameter has been passed as a string or as a variable name from is.character(var) to deparse(substitute(var)) and a further check with grep(). In fact is.character() does not work because it returns TRUE when the specified column is a character column in a data frame.
 
+
+**********************************************************************************************************************
+* IMPORTANT: THE PROJECT WAS MOVED TO DMTOOLS AND ALL THE COMMIT INFORMATION IS NOW TRACKED IN git-commit-dmtools.txt
+**********************************************************************************************************************

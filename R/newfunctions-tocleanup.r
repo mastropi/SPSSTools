@@ -23,7 +23,7 @@ compareDistributions = function(dat,
 
   # Parse input parameters
   vars = unlist(strsplit(vars, "[ \n]"))
-  varsNotFound = checkVariables(dat, c(vars, sample))
+  varsNotFound = checkVariables(dat, c(vars, varsample))
   if (!is.null(varsNotFound))
     stop("Execution of compareDistributions() stops.\n")
 
@@ -39,7 +39,7 @@ compareDistributions = function(dat,
   idx = vector("list", nsamples)
   names(idx) = samplenames
   for (i in 1:nsamples) {
-    idx[[samplenames[i]]] = which(dat[, varsample] == samplevalues[i])
+    idx[[samplenames[i]]] = which(substr(dat[, varsample], 1, nchar(samplevalues[i])) == samplevalues[i])
   }
   print(str(idx))
 
@@ -62,7 +62,7 @@ compareDistributions = function(dat,
         # PCA for the non-TRAIN samples (JUST to compute XLIM and YLIM! --see comments below)
         eval( parse( text=paste(s, ".data = dat[idx", s, ", vars]", sep="") ) )
         eval( parse( text=paste(s, ".pca = princomp(", s, ".data, cor=TRUE)", sep="") ) )
-        
+
         # Compute the scores of VALID and TEST on the TRAIN principal components
         # so that we can compare the multidimensional position of the points in VALID and TEST
         # w.r.t. the points in TRAIN
@@ -71,7 +71,7 @@ compareDistributions = function(dat,
         eval( parse( text=paste(s, ".pca.1 = train.pca", sep="") ) )
         eval( parse( text=paste(s, ".pca.1$data = scale(", s, ".data, center=train.mean, scale=train.sd*sqrt((train.n-1)/train.n))", sep="") ) )
         eval( parse( text=paste(s, ".pca.1$scores = ", s, ".pca.1$data %*% train.pca$loadings", sep="") ) )
-        
+
         # Update the limits for the biplots based on ALL samples (to ease visual comparison)
         # (this should be the limits of the principal components (i.e. of the observations,
         # which are NOT the values returned by par("usr") after making the plot because this
@@ -81,23 +81,23 @@ compareDistributions = function(dat,
         #range(pretty(range(c(train.pca$scores[,"Comp.2"], valid.pca$scores[,"Comp.2"], test.pca$scores[,"Comp.2"]))))
         xlim = range(pretty(xlim))
         ylim = range(pretty(ylim))
-        
+
         #****** This should be tuned on a case by case basis ********
         # Adjustment of axes based on results:
         #     xlim = xlim / 3
         #     ylim = ylim / 3
         #****** This should be tuned on a case by case basis ********
-        
+
         #     summary(train.pca)
         #     loadings(train.pca)
         #     plot(train.pca)
       }
     }
-    
+
     # Means of VALID and TEST data re-scaled using TRAIN data
 #     print("Centered population means (i.e. biplot scale)")
 #     print(cbind(train=train.mean, valid=apply(valid.pca.1$data, 2, mean), test=apply(test.pca.1$data, 2, mean)))
-    
+
     # Generate the biplots
     # NOTE: It is important to use pc.biplot=TRUE o.w. the xlim and ylim values would be wrong...
     cex = c(0.1,0.8)
@@ -128,103 +128,38 @@ compareDistributions = function(dat,
 # --------------------------------------- Learning Curves ------------------------------------------
 
 
-# ------------------------------------- Qualify Variables ------------------------------------------
-# Qualifies variables in:
-# - categorical (character or few categories)
-# - continuous (numeric with many distinct values)
-# - rejected (0 or 1 distinct value or too many missing)
-# Needs package sqldf
-library(sqldf)
-QualifyVars = function(dat, vars=NULL, maxncat=25, maxpropcat=0.95, maxpropmiss=0.50, log=TRUE) {
-# Parameters
-# dat								 # Data frame containing the data for analysis
-# maxncat = 25       # Maximum number of categories to consider a variable categorical
-# maxpropcat = 0.95  # Maximum proportion in category to consider a variable as useful
-# maxpropmiss = 0.50 # Maximum proportion of missing values to consider a variable as useful
-# log = TRUE				 # Whether to show messages
 
-	# Output variables
-	tab.freq = data.frame(Var=character(0), Index=character(0), Var1=character(0), Freq=numeric(0), Prop=numeric(0), Target=numeric(0), Target2=numeric(0), Rejected=numeric(0))
-	df.varcont = data.frame(var=character(0), type=character(0), nvalues=numeric(0), pvalues=numeric(0))
-	df.varcat = data.frame(var=character(0), type=character(0), nvalues=numeric(0), rejected=numeric(0))
-	df.varrej = data.frame(var=character(0), type=character(0), nvalues=numeric(0), pmiss=numeric(0), pmaxcat=numeric(0))
 
-	if (is.null(vars)) {
-		vars = colnames(dat)
-	} else {
-		vars = parseVariables(vars)
-	}
+# --------------------------------- Boxplots (with n) and Barplots ---------------------------------
+# (2017/01/11)
+# - Boxplots showing sample size
+# - Barplots to show variable distribution
+# - Barplots to show relationship between a binary target and a categorical variable
+# Ref: NBC -> ModeloPymes2016 -> D-Modelo -> D5 -> aux12-AnalisisVarios.sps
 
-	# Start process
-	i = 0
-	nvarcont = 0
-	nvarcat = 0
-	nvarrej = 0
-	ntotal = nrow(dat)
-	for (v in vars) {
-		i = i + 1
-		if (log) cat("Analyzing variable", i, ":")
+# Boxplot showing sample size
+ylim = c(-1,1)
+cex = 0.8
+xticks = unique(toplot$TW)
+bxp = boxplot(woe_CapDevDeuda ~ TW, data=toplot, main="woe_CapDevDeuda")
+mtext("TW", side=1, line=3)
+mtext(paste("(", bxp$n, ")", sep=""), side=1, line=2, at=xticks, las=2, cex=cex)
 
-		# Variable type and number of distinct values
-		type = class(dat[,v])
-		result = sqldf(paste("select count(distinct(", v, ")) as nvalues, sum(case when", v, "is null then 1 else 0 end) as nmiss from dat"))
+# Barplots showing relative distribution of a variable (v) for each value of another variable (TW)
+groups = sort(unique(toplot$TW))
+vars = "GR_Categoria
+GR_SectorEconomico"
+ylim = c(0,1)
 
-		if (result$nvalues <= 1 || result$nmiss/ntotal > maxpropmiss) {
-			nvarrej = nvarrej + 1
-			df.varrej = rbind(df.varrej, data.frame(var=v, type=type, nvalues=result$nvalues, pmiss=result$nmiss/ntotal, pmaxcat=NA))
-			if (log) cat(" REJECTED ", nvarrej, " (", v, ")\n", sep="")
-		} else if (type %in% c("character", "factor") || result$nvalues <= maxncat) {
-			nvarcat = nvarcat + 1
-			if (log) cat(" CATEGORICAL ", nvarcat, " (", v, ")", sep="")
-
-			# Frequency distribution when there are not so many categories
-			if (result$nvalues <= maxncat) {
-				tab = as.data.frame( table(dat[,v]) )
-				tab$Prop = tab$Freq / sum(tab$Freq)
-
-				# Targets penetration
-				xtab = table(dat[,v], dat[,target])
-				xtab2 = table(dat[,v], dat[,target2])
-				tab$Target = xtab[tab$Var1, event] / tab$Freq
-				tab$Target2 = xtab2[tab$Var1, event] / tab$Freq
-
-				# Update variable values so that they are numbered and easily filtered in Excel (with ':')
-				tab$Index = rownames(tab)
-				tab$Var = v
-
-				# Check max proportion in categorical value
-				if (max(tab$Prop) > maxpropcat) {
-					# Reject the variable
-					rejected = 1
-					nvarrej = nvarrej + 1
-					df.varrej = rbind(df.varrej, data.frame(var=v, type=type, nvalues=result$nvalues, pmiss=result$nmiss/ntotal, pmaxcat=max(tab$Prop)))
-					if (log) cat(" --> REJECTED ", nvarrej, " (max prop. category = ", formatC(max(tab$Prop), digits=2), " > ", maxpropcat, ")\n", sep="")
-				} else {
-					rejected = 0
-					if (log) cat("\n")
-				}
-
-				# Update the output tables
-				df.varcat = rbind(df.varcat, data.frame(var=v, type=type, nvalues=result$nvalues, rejected=rejected))
-				tab$Rejected = rejected
-				tab.freq = rbind(tab.freq[,c("Var", "Index", "Var1", "Freq", "Prop", "Target2", "Target", "Rejected")],
-												 tab,
-												 data.frame(Var=v,
-																		Index="--TOTAL--",
-																		Var1="",
-																		Freq=sum(tab$Freq),
-																		Prop=NA,
-																		Target2=weighted.mean(tab$Target2, tab$Freq),
-																		Target=weighted.mean(tab$Target, tab$Freq),
-																		Rejected=rejected)
-												)
-			}
-		} else {
-			nvarcont = nvarcont + 1
-			df.varcont = rbind(df.varcont, data.frame(var=v, type=type, nvalues=result$nvalues, pvalues=result$nvalues/ntotal))
-			if (log) cat("\tCONTINUOUS ", nvarcont, " (", v, ")\n", sep="")
-		}
-	}
-
-	return(list(tab.freq=tab.freq, df.varcat=df.varcat, df.varcont=df.varcont, df.varrej=df.varrej))
+for (v in parseVariables(vars)) {
+	# Calculo de los valores a graficar
+	tab = prop.table( table(toplot[,v], toplot$TW), 2)
+	print(tab)
+	barplot(tab, main=v, ylim=ylim, beside=TRUE)
 }
+
+# Binary target vs. categorical variable
+tab = prop.table( table(toplot$Malo3Mas, toplot$TW), 2)
+print(tab)
+plot(colnames(tab), tab["1",])
+# --------------------------------- Boxplot with sample size ---------------------------------------
