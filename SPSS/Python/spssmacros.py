@@ -2517,8 +2517,11 @@ def TransformPercent(
     The percentage is computed as the division num / den * 100, whenever den is not 0.
     Otherwise, if den = 0, two different values may be returned, depending on the result of applying 'numConditionMiss'
     on the numerator variable, namely:
-    - if 'numConditionMiss' is satisfied => the result is the value given in 'miss'.
-    - if 'numConditionMiss' is NOT satisfied => the result is $SYSMIS.
+    - if 'numConditionMiss' is satisfied => the result is the value given in 'miss'
+        --> e.g. 0 (miss) could makes sense when `num = 0` (numConditionMiss), even if we are dividing by 0.
+    - if 'numConditionMiss' is NOT satisfied => the result is $SYSMIS
+        --> e.g. when we divide by 0, usually it doesn't make sense to assign a non-missing value when
+        the numerator is different from 0 (to indicate this, we should use `numConditionMiss="var = 0"`).
     
     New variables with the prefix given in 'prefix' and suffix given in 'suffix' are created, as many as
     variables listed in 'vars'.
@@ -2546,9 +2549,10 @@ def TransformPercent(
                             Default: 0
     numConditionMiss:       Condition to be satisfied by the numerator variable in order to set the result of the
                             percent operation to the value given in parameter 'miss' when the denominator variable
-                            'den' is 0 (or satisfies the condition given in 'denConditionMiss').
+                            'den' is 0 (or satisfies the condition given in 'denConditionMiss', if given).
                             If the condition is not satisfied, the value used for the result of the percent
                             operation is $SYSMIS.
+                            The condition should be a valid SPSS expression and should refer to the numerator variable as `var`.
                             Ex: "var = 0" (only when the numerator variable is 0 is the resulting
                             percent variable set to the value or expression given in 'miss' --whenever the denominator
                             variable is also 0 or satisfies the condition given in 'denConditionMiss')
@@ -2573,11 +2577,11 @@ def TransformPercent(
     preplace:               Logical: whether the prefix should replace the initial part of the variable name
                             that is as long as the prefix.
                             Default: True
-                            Ex: (when True) The percentage on V_VOLUME when prefix = 'P_' is named P_VOLUME.
+                            Ex: (when True) The transformed variable of V_VOLUME when prefix = 'P_' is named P_VOLUME.
     sreplace:               Logical: whether the suffix should replace the end part of the variable name
                             that is as long as the suffix.
                             Default: False
-                            Ex: (when False) The percentage on V_VOLUME when suffix = '_PCT' is named V_VOLUME_PCT.
+                            Ex: (when False) The transformed variable of V_VOLUME when suffix = '_PCT' is named V_VOLUME_PCT.
     macrovar:               Name of the Python variable and the SPSS macro variable to store the list of variable names
                             created by the process, separated by new line characters.
                             For the SPSS macro variable name, the nme given is uppercased and a '!' is added at the beginning.
@@ -2631,7 +2635,7 @@ def TransformPercent(
     #-- Create the list of percent variables
     pvarlist = []   # Prefix 'p' stands for PERCENT
     for var in varlist:
-        print "\nProcessing variable " + var + "..."
+        print "\n* Creating percent variable for " + var + "..."
         if preplace:
             if sreplace:
                 pvar = prefix + var[len(prefix):len(var)-len(suffix)] + suffix
@@ -2653,8 +2657,7 @@ def TransformPercent(
         else:
             missvalue = 0
 
-        submitstr = r"""
-do if not(%(den)s = 0)""" + (denConditionMiss and " and not(%(denConditionMiss)s)" or "") + r""".
+        submitstr = r"""do if not(%(den)s = 0)""" + (denConditionMiss and " and not(%(denConditionMiss)s)" or "") + r""".
 + compute %(pvar)s = %(var)s / %(den)s * 100.
 """
         if numConditionMiss:
@@ -2676,21 +2679,23 @@ end if.
 end if.
 """
         if min <> None:
-            submitstr = submitstr + r"""
-if %(pvar)s < %(min)s %(pvar)s = %(min)s.
+            submitstr = submitstr + r"""if %(pvar)s < %(min)s %(pvar)s = %(min)s.
 """
         if max:
-            submitstr = submitstr + r"""
-if %(pvar)s > %(max)s %(pvar)s = %(max)s.
+            submitstr = submitstr + r"""if %(pvar)s > %(max)s %(pvar)s = %(max)s.
 """
-        submitstr = submitstr + "execute.\n"
 
         if log or test:
             print(submitstr %locals())
         if not test:
             spss.Submit(submitstr %locals())
-    
-    if test:
+
+    if not test:
+        if log:
+            print("execute.")
+        spss.Submit("execute")
+    else:
+        print("execute.")
         print "--- Test mode execution ---"
         
     #-- Show the list of percent variables.
@@ -2761,25 +2766,29 @@ def TransformLog(
                             Default: None
     preplace:               Logical: whether the prefix should replace the initial part of the variable name
                             that is as long as the prefix.
-                            Ex: (when True) The percentage on V_VOLUME when prefix = 'P_' is named P_VOLUME.
+                            Ex: (when True) The transformed variable of V_VOLUME when prefix = 'L_' is named L_VOLUME.
                             Default: False
     sreplace:               Logical: whether the suffix should replace the end part of the variable name
                             that is as long as the suffix.
-                            Ex: (when False) The percentage on V_VOLUME when suffix = '_PCT' is named V_VOLUME_PCT.
+                            Ex: (when False) The transformed variable of V_VOLUME when suffix = '_LOG' is named V_VOLUME_LOG.
                             Default: False
     pposition:              Position from the START of the original variable name at which the prefix STARTS being
                             inserted.
                             Ex: When prefix = 'ZL_', preplace = False, pposition = 3
-                            The variable containing the Log transformation of variable V_VOLUME is named V_ZL_VOLUME.
+                            The transformed variable of V_VOLUME is named V_ZL_VOLUME.
                             Default: 1
     sposition:              Position from the END of the original variable name at which the suffix ENDS being
                             inserted.
                             Ex: When suffix = '_L', preplace = False, pposition = 1
-                            The variable containing the Log transformation of variable V_VOLUME is named V_VOLUME_L
+                            The transformed variable of V_VOLUME is named V_VOLUME_L
+                            (the suffix is appended after character 1 from the right of the original variable name)
                             Ex: When suffix = '_L', preplace = True, pposition = 1
-                            The variable containing the Log transformation of variable V_VOLUME_PC is named V_VOLUME_L
+                            The transformed variable of V_VOLUME_PC is named V_VOLUME_L
+                            (the suffix replaces the original variable name as many characters from character 1 from the right)
                             Ex: When suffix = '_L', preplace = False, pposition = 5
-                            The variable containing the Log transformation of variable V_VOLUME_PCT is named V_VOLUME_L_PCT
+                            The transformed variable of V_VOLUME_PCT is named V_VOLUME_L_PCT
+                            (the suffix is inserted before character 4 of the original variable name counting from the right
+                            and it ends at character 5 (=sposition) in the transformed variable name)
                             Default: 1
     macrovar:               Name of the Python variable and the SPSS macro variable to store the list of variable names
                             created by the process, separated by new line characters.
@@ -2830,7 +2839,7 @@ def TransformLog(
     #-- Create the list of Log-transformed variables
     lvarlist = []       # Prefix 'l' stands for LOG
     for var in varlist:
-        print "\nProcessing variable " + var + "..."
+        print "\n* Creating log of variable " + var + "..."
         if preplace:
             if sreplace:
                 lvar = var[:pposition-1] + prefix + var[len(prefix)+pposition-1:len(var)-len(suffix)-sposition+1]   + suffix + var[len(var)-sposition+1:]
@@ -2844,12 +2853,10 @@ def TransformLog(
         lvarlist.append(lvar)
 
         if safe:
-            submitstr = r"""
-compute %(lvar)s = ((%(var)s>0)-(%(var)s<0)) * LG10(1 + abs(%(var)s)).
+            submitstr = r"""compute %(lvar)s = ((%(var)s>0)-(%(var)s<0)) * LG10(1 + abs(%(var)s)).
 """
         else:
-            submitstr = r"""
-if %(var)s > 0.
+            submitstr = r"""if %(var)s > 0.
 + compute %(lvar)s = LG10(%(var)s).
 else.
 + compute %(lvar)s = $SYSMIS.
@@ -2949,24 +2956,29 @@ def TransformIndicator(
     preplace:               Logical: whether the prefix should replace the initial part of the variable name
                             that is as long as the prefix.
                             Default: False
-                            Ex: (when True) The percentage on V_VOLUME when prefix = 'P_' is named P_VOLUME.
+                            Ex: (when True) The transformed variable of V_VOLUME when prefix = 'I_' is named I_VOLUME,
+                            but beware that when prefix = 'IN_' the transformed variable is named IN_OLUME.
     sreplace:               Logical: whether the suffix should replace the end part of the variable name
                             that is as long as the suffix.
                             Default: False
-                            Ex: (when False) The percentage on V_VOLUME when suffix = '_PCT' is named V_VOLUME_PCT.
+                            Ex: (when False) The transformed variable of V_VOLUME when suffix = '_IN' is named V_VOLUME_IN.
     pposition:              Position from the START of the original variable name at which the prefix STARTS being
                             inserted.
-                            Ex: When prefix = 'ZL_', preplace = False, pposition = 3
-                            The variable containing the Log transformation of variable V_VOLUME is named V_ZL_VOLUME.
+                            Ex: When prefix = 'IN_', preplace = False, pposition = 3,
+                            the transformed variable of V_VOLUME is named V_IN_VOLUME.
                             Default: 1
-    sposition:              Position from the END of the original variable name at which the suffix ENDS being
-                            inserted.
-                            Ex: When suffix = '_L', preplace = False, pposition = 1
-                            The variable containing the Log transformation of variable V_VOLUME is named V_VOLUME_L
-                            Ex: When suffix = '_L', preplace = True, pposition = 1
-                            The variable containing the Log transformation of variable V_VOLUME_PC is named V_VOLUME_L
-                            Ex: When suffix = '_L', preplace = False, pposition = 5
-                            The variable containing the Log transformation of variable V_VOLUME_PCT is named V_VOLUME_L_PCT
+    sposition:              Position from the END of the original variable name at which the suffix ENDS its
+                            insertion.
+                            Ex: When suffix = '_I', preplace = False, sposition = 1
+                            The transformed variable of V_VOLUME is named V_VOLUME_I
+                            (the suffix is appended after character 1 from the right of the original variable name)
+                            Ex: When suffix = '_I', preplace = True, sposition = 1
+                            The transformed variable of V_VOLUME_PC is named V_VOLUME__I
+                            (the suffix replaces the original variable name as many characters from character 1 from the right)
+                            Ex: When suffix = '_I', preplace = False, sposition = 5
+                            The transformed variable of V_VOLUME_PCT is named V_VOLUME_I_PCT
+                            (the suffix is inserted before character 4 of the original variable name counting from the right
+                            and it ends at character 5 (=sposition) in the transformed variable name)
                             Default: 1
     macrovar:               Name of the Python variable and the SPSS macro variable to store the list of variable names
                             created by the process, separated by new line characters.
@@ -3080,7 +3092,7 @@ def TransformIndicator(
         # ivarlist because %(condition)s needs to evaluate correctly to the corresponding input variable.
         ivar = ivarlist[i]
         var = varlist[i]
-        print create and "\nCreating" or not create and "\nUpdating" + " indicator variable of " + str(values) + " for variable " + var + "..."
+        print (create and "\n* Creating" or not create and "\n* Updating") + " indicator variable of " + (reverse and "not " or "") + str(values) + " for variable " + var + "..."
         submitstr = r"compute %(ivar)s = %(condition)s." %locals()
 
         if log or test:
